@@ -1,5 +1,5 @@
 ///
-/// Copyright (C) 2015, Cyberhaven
+/// Copyright (C) 2015-2020, Cyberhaven
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a copy
 /// of this software and associated documentation files (the "Software"), to deal
@@ -19,56 +19,55 @@
 /// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 /// SOFTWARE.
 ///
+///
+#ifndef S2E_PLUGINS_SyscallReportCollector_H
+#define S2E_PLUGINS_SyscallReportCollector_H
 
-#ifndef S2E_PLUGINS_ProcessExecutionDetector_H
-#define S2E_PLUGINS_ProcessExecutionDetector_H
+#include <llvm/ADT/DenseMap.h>
 
 #include <s2e/CorePlugin.h>
 #include <s2e/Plugin.h>
+#include <s2e/Plugins/Core/Vmi.h>
+#include <s2e/Plugins/OSMonitors/Support/ModuleMap.h>
+#include <s2e/Plugins/OSMonitors/Support/ProcessExecutionDetector.h>
 #include <s2e/S2EExecutionState.h>
-
-#include <llvm/ADT/DenseSet.h>
+#include "SimpleCFIChecker.h"
 
 namespace s2e {
 namespace plugins {
 
-class OSMonitor;
+class WindowsMonitor;
 
-typedef llvm::DenseSet<uint64_t> TrackedPids;
-
-class ProcessExecutionDetector : public Plugin {
+class SyscallReportCollector : public Plugin {
     S2E_PLUGIN
 public:
-    ProcessExecutionDetector(S2E *s2e) : Plugin(s2e) {
+    SyscallReportCollector(S2E *s2e) : Plugin(s2e) {
     }
 
     void initialize();
 
-    bool isTracked(S2EExecutionState *state);
-    bool isTracked(S2EExecutionState *state, uint64_t pid);
-    bool isTracked(const std::string &module) const;
-    bool isTrackedPc(S2EExecutionState *state, uint64_t pc, bool checkCpl = false);
-
-    void trackPid(S2EExecutionState *state, uint64_t pid);
-
-    sigc::signal<void, S2EExecutionState *> onMonitorLoad;
-
-    const TrackedPids &getTrackedPids(S2EExecutionState *state) const;
-
 private:
-    typedef std::unordered_set<std::string> StringSet;
+    ProcessExecutionDetector *m_detector;
+    WindowsMonitor *m_monitor;
+    Vmi *m_vmi;
+    SimpleCFIChecker *m_cfi;
+    ModuleMap *m_modules;
 
-    OSMonitor *m_monitor;
+    bool m_filterByModule;
+    std::string m_filterModuleName;
 
-    StringSet m_trackedModules;
+    llvm::DenseMap<uint64_t, unsigned> m_syscallCountStats;
+    unsigned m_counter;
+    bool m_changed;
 
     void onProcessLoad(S2EExecutionState *state, uint64_t pageDir, uint64_t pid, const std::string &ImageFileName);
-    void onProcessUnload(S2EExecutionState *state, uint64_t pageDir, uint64_t pid, uint64_t returnCode);
+    void onWindowsSyscall(S2EExecutionState *state, uint64_t pc, uint64_t syscallId, uint64_t stack);
 
-    void onMonitorLoadCb(S2EExecutionState *state);
+    void onTimer();
+    void reportSyscalls();
 };
 
 } // namespace plugins
 } // namespace s2e
 
-#endif // S2E_PLUGINS_ProcessExecutionDetector_H
+#endif // S2E_PLUGINS_SyscallReportCollector_H

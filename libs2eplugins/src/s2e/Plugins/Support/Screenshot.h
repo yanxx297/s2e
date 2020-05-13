@@ -1,5 +1,6 @@
 ///
-/// Copyright (C) 2015, Cyberhaven
+/// Copyright (C) 2014, Dependable Systems Laboratory, EPFL
+/// Copyright (C) 2014-2020, Cyberhaven, Inc
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a copy
 /// of this software and associated documentation files (the "Software"), to deal
@@ -20,55 +21,35 @@
 /// SOFTWARE.
 ///
 
-#ifndef S2E_PLUGINS_ProcessExecutionDetector_H
-#define S2E_PLUGINS_ProcessExecutionDetector_H
+#ifndef S2E_PLUGINS_Screenshot_H
+#define S2E_PLUGINS_Screenshot_H
 
 #include <s2e/CorePlugin.h>
 #include <s2e/Plugin.h>
 #include <s2e/S2EExecutionState.h>
-
-#include <llvm/ADT/DenseSet.h>
+#include <string>
 
 namespace s2e {
 namespace plugins {
 
-class OSMonitor;
-
-typedef llvm::DenseSet<uint64_t> TrackedPids;
-
-class ProcessExecutionDetector : public Plugin {
+class Screenshot : public Plugin {
     S2E_PLUGIN
 public:
-    ProcessExecutionDetector(S2E *s2e) : Plugin(s2e) {
+    Screenshot(S2E *s2e) : Plugin(s2e) {
     }
 
     void initialize();
-
-    bool isTracked(S2EExecutionState *state);
-    bool isTracked(S2EExecutionState *state, uint64_t pid);
-    bool isTracked(const std::string &module) const;
-    bool isTrackedPc(S2EExecutionState *state, uint64_t pc, bool checkCpl = false);
-
-    void trackPid(S2EExecutionState *state, uint64_t pid);
-
-    sigc::signal<void, S2EExecutionState *> onMonitorLoad;
-
-    const TrackedPids &getTrackedPids(S2EExecutionState *state) const;
+    void takeScreenShot(const std::string &fileName);
+    std::string takeScreenShot(S2EExecutionState *state);
 
 private:
-    typedef std::unordered_set<std::string> StringSet;
+    unsigned m_period;
+    unsigned m_counter;
 
-    OSMonitor *m_monitor;
-
-    StringSet m_trackedModules;
-
-    void onProcessLoad(S2EExecutionState *state, uint64_t pageDir, uint64_t pid, const std::string &ImageFileName);
-    void onProcessUnload(S2EExecutionState *state, uint64_t pageDir, uint64_t pid, uint64_t returnCode);
-
-    void onMonitorLoadCb(S2EExecutionState *state);
+    void onTimer();
 };
 
 } // namespace plugins
 } // namespace s2e
 
-#endif // S2E_PLUGINS_ProcessExecutionDetector_H
+#endif // S2E_PLUGINS_Screenshot_H

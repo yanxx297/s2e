@@ -31,6 +31,7 @@ add_library(
     # Support plugins
     s2e/Plugins/Support/KeyValueStore.cpp
     s2e/Plugins/Support/WebServiceInterface.cpp
+    s2e/Plugins/Support/Screenshot.cpp
 
     # OS support
     s2e/Plugins/OSMonitors/ModuleDescriptor.cpp
@@ -114,7 +115,12 @@ add_library(
 
     # Misc plugins
     s2e/Plugins/Example.cpp
+
+    # Analysis plugins
     s2e/Plugins/Analyzers/CacheSim.cpp
+    s2e/Plugins/Analyzers/SimpleCFIChecker.cpp
+    s2e/Plugins/Analyzers/SimpleCFIReportCollector.cpp
+    s2e/Plugins/Analyzers/SyscallReportCollector.cpp
 
     # Execution monitors
     s2e/Plugins/ExecutionMonitors/CallSiteMonitor.cpp
