@@ -118,9 +118,9 @@ add_library(
 
     # Analysis plugins
     s2e/Plugins/Analyzers/CacheSim.cpp
-    s2e/Plugins/Analyzers/SimpleCFIChecker.cpp
-    s2e/Plugins/Analyzers/SimpleCFIReportCollector.cpp
-    s2e/Plugins/Analyzers/SyscallReportCollector.cpp
+    # s2e/Plugins/Analyzers/SimpleCFIChecker.cpp
+    # s2e/Plugins/Analyzers/SimpleCFIReportCollector.cpp
+    # s2e/Plugins/Analyzers/SyscallReportCollector.cpp
 
     # Execution monitors
     s2e/Plugins/ExecutionMonitors/CallSiteMonitor.cpp

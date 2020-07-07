@@ -1,6 +1,6 @@
 ///
 /// Copyright (C) 2014-2015, Dependable Systems Laboratory, EPFL
-/// Copyright (C) 2014-2010, Cyberhaven
+/// Copyright (C) 2014-2020, Cyberhaven
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a copy
 /// of this software and associated documentation files (the "Software"), to deal
