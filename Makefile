@@ -298,6 +298,7 @@ LLVM_CONFIGURE_FLAGS = -DLLVM_TARGETS_TO_BUILD="X86"        \
                        -DLLVM_INCLUDE_EXAMPLES=Off          \
                        -DLLVM_INCLUDE_DOCS=Off              \
                        -DLLVM_INCLUDE_TESTS=On              \
+		       -DLLVM_USE_LINKER=gold \
                        -DLLVM_ENABLE_RTTI=On                \
                        -DLLVM_ENABLE_EH=On                  \
                        -DLLVM_BINUTILS_INCDIR=/usr/include  \
