@@ -12,6 +12,16 @@ void *mymset(void *dst, int s, size_t count) {
 }
 
 
+void *mymset2(void *dst, int s, size_t count) {
+    int i = 0;
+      char *a = dst;
+        while (i< count){
+	        *a++ = s;
+		i ++;
+	}
+	  return dst;
+}
+
 int main(){
 	int arr[SIZE];
 	int n;
