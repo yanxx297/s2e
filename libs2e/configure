@@ -257,6 +257,8 @@ echo "=== Configuring libtcg... ==="
 rm -rf libtcg && mkdir -p libtcg && cd libtcg
 LLVM_DIR="$LLVM_ROOT/lib/cmake/llvm"
 cmake -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX"      \
+	-DCMAKE_C_COMPILER_LAUNCHER=ccache \
+	-DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS"     \
     -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DWITH_GUEST="$target"       \
     -DLIBQ_DIR=$LIBQ_DIR                                        \
@@ -271,6 +273,8 @@ echo "=== Configuring libcpu... ==="
 rm -rf libcpu && mkdir -p libcpu && cd libcpu
 
 cmake -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX"  \
+	-DCMAKE_C_COMPILER_LAUNCHER=ccache \
+	-DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
     -DCMAKE_BUILD_TYPE=$BUILD_TYPE                          \
     -DLIBTCG_DIR="$(pwd)/../libtcg"                         \
@@ -296,6 +300,8 @@ echo "=== Configuring libs2ecore... ==="
 rm -rf libs2ecore && mkdir -p libs2ecore && cd libs2ecore
 
 cmake -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX"  \
+	-DCMAKE_C_COMPILER_LAUNCHER=ccache \
+	-DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
     -DCMAKE_BUILD_TYPE=$BUILD_TYPE                          \
     -DCMAKE_PREFIX_PATH="$PREFIX"                           \
@@ -319,6 +325,8 @@ echo "=== Configuring libs2eplugins... ==="
 rm -rf libs2eplugins && mkdir -p libs2eplugins && cd libs2eplugins
 
 cmake -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX"  \
+	-DCMAKE_C_COMPILER_LAUNCHER=ccache \
+	-DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
     -DCMAKE_BUILD_TYPE=$BUILD_TYPE                          \
     -DCMAKE_PREFIX_PATH="$PREFIX"                           \
@@ -346,6 +354,8 @@ echo "=== Configuring libs2e... ==="
 rm -rf libs2e && mkdir -p libs2e && cd libs2e
 
 cmake -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX"  \
+	-DCMAKE_C_COMPILER_LAUNCHER=ccache \
+	-DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
     -DCMAKE_BUILD_TYPE=$BUILD_TYPE                          \
     -DCMAKE_PREFIX_PATH="$PREFIX"                           \
@@ -375,7 +385,7 @@ cd ..
 echo "============== Configuring $target done ============== "
 }
 
-TARGETS="i386-softmmu i386-s2e-softmmu i386-s2e_sp-softmmu x86_64-softmmu x86_64-s2e-softmmu x86_64-s2e_sp-softmmu"
+TARGETS="x86_64-s2e-softmmu"
 
 for target in $TARGETS; do
     rm -f ${target}.log

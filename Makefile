@@ -295,6 +295,8 @@ CLANG_LIB = $(S2E_PREFIX)/lib
 
 LLVM_CONFIGURE_FLAGS = -DLLVM_TARGETS_TO_BUILD="X86"        \
                        -DLLVM_TARGET_ARCH="X86_64"          \
+		       -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+		       -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                        -DLLVM_INCLUDE_EXAMPLES=Off          \
                        -DLLVM_INCLUDE_DOCS=Off              \
                        -DLLVM_INCLUDE_TESTS=On              \
@@ -344,6 +346,8 @@ endif
 SOCI_CONFIGURE_FLAGS = -DCMAKE_INSTALL_PREFIX=$(S2E_PREFIX) \
                        -DCMAKE_C_COMPILER=$(CLANG_CC)       \
                        -DCMAKE_CXX_COMPILER=$(CLANG_CXX)    \
+		       -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+		       -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                        -DCMAKE_C_FLAGS="-fPIC"              \
                        -G "Unix Makefiles"
 
@@ -363,6 +367,8 @@ stamps/soci-make: stamps/soci-configure
 Z3_CONFIGURE_FLAGS = -DCMAKE_INSTALL_PREFIX=$(S2E_PREFIX)               \
                      -DCMAKE_C_COMPILER=$(CLANG_CC)                     \
                      -DCMAKE_CXX_COMPILER=$(CLANG_CXX)                  \
+		     -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+		     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                      -DCMAKE_C_FLAGS="-fno-omit-frame-pointer -fPIC"    \
                      -DCMAKE_CXX_FLAGS="-fno-omit-frame-pointer -fPIC"  \
                      -DBUILD_LIBZ3_SHARED=Off                           \
@@ -388,6 +394,8 @@ stamps/z3-make: stamps/z3-configure
 CAPSTONE_CONFIGURE_FLAGS = -DCMAKE_INSTALL_PREFIX=$(S2E_PREFIX)         \
                      -DCMAKE_C_COMPILER=$(CLANG_CC)                     \
                      -DCMAKE_CXX_COMPILER=$(CLANG_CXX)                  \
+		     -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+		     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                      -DCMAKE_C_FLAGS="-fno-omit-frame-pointer -fPIC"    \
                      -DCMAKE_CXX_FLAGS="-fno-omit-frame-pointer -fPIC"  \
                      -G "Unix Makefiles"
@@ -424,6 +432,8 @@ RAPIDJSON_CONFIGURE_FLAGS = -DCMAKE_INSTALL_PREFIX=$(S2E_PREFIX)                
                             -DCMAKE_C_FLAGS="$(CFLAGS_ARCH) -fno-omit-frame-pointer -fPIC"       \
                             -DCMAKE_C_COMPILER=$(CLANG_CC)                                       \
                             -DCMAKE_CXX_COMPILER=$(CLANG_CXX)                                    \
+			    -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+			    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
 
 
 stamps/rapidjson-configure: stamps/clang-binary $(RAPIDJSON_BUILD_DIR)
@@ -482,6 +492,8 @@ stamps/gtest-release-make: stamps/gtest-release-configure
 ########
 
 KLEE_CONFIGURE_FLAGS = -DCMAKE_INSTALL_PREFIX=$(S2E_PREFIX)                                 \
+		       -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+		       -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                        -DCMAKE_C_FLAGS="$(CFLAGS_ARCH) -fno-omit-frame-pointer -fPIC"       \
                        -DCMAKE_C_COMPILER=$(CLANG_CC)                                       \
                        -DCMAKE_CXX_COMPILER=$(CLANG_CXX)                                    \
@@ -519,6 +531,8 @@ LIBVMI_COMMON_FLAGS = -DCMAKE_INSTALL_PREFIX=$(S2E_PREFIX)          \
                       -DCMAKE_MODULE_PATH=$(S2E_SRC)/cmake          \
                       -DCMAKE_C_COMPILER=$(CLANG_CC)                \
                       -DCMAKE_CXX_COMPILER=$(CLANG_CXX)             \
+		      -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+		      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                       -DCMAKE_C_FLAGS="$(CFLAGS_ARCH) -fPIC"        \
                       -G "Unix Makefiles"
 
@@ -557,6 +571,8 @@ stamps/libvmi-release-install: stamps/libvmi-release-make
 LIBFSIGCXX_COMMON_FLAGS = -DCMAKE_MODULE_PATH=$(S2E_SRC)/cmake  \
                           -DCMAKE_C_COMPILER=$(CLANG_CC)        \
                           -DCMAKE_CXX_COMPILER=$(CLANG_CXX)     \
+			  -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+			  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                           -DCMAKE_C_FLAGS="$(CFLAGS_ARCH)"      \
                           -G "Unix Makefiles"
 
@@ -586,6 +602,8 @@ stamps/libfsigc++-release-make: stamps/libfsigc++-release-configure $(call FIND_
 LIBQ_COMMON_FLAGS = -DCMAKE_MODULE_PATH=$(S2E_SRC)/cmake    \
                     -DCMAKE_C_COMPILER=$(CLANG_CC)          \
                     -DCMAKE_CXX_COMPILER=$(CLANG_CXX)       \
+		    -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+		    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                     -DCMAKE_C_FLAGS="$(CFLAGS_ARCH)"        \
                     -G "Unix Makefiles"
 
@@ -615,6 +633,8 @@ stamps/libq-release-make: stamps/libq-release-configure $(call FIND_SOURCE,$(S2E
 LIBCOROUTINE_COMMON_FLAGS = -DCMAKE_MODULE_PATH=$(S2E_SRC)/cmake    \
                             -DCMAKE_C_COMPILER=$(CLANG_CC)          \
                             -DCMAKE_CXX_COMPILER=$(CLANG_CXX)       \
+			    -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+			    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                             -DCMAKE_C_FLAGS="$(CFLAGS_ARCH)"        \
                             -G "Unix Makefiles"
 
@@ -760,6 +780,8 @@ stamps/libs2e-debug-install: stamps/libs2e-debug-make
 TOOLS_CONFIGURE_FLAGS = -DCMAKE_INSTALL_PREFIX=$(S2E_PREFIX)              \
                         -DCMAKE_C_COMPILER=$(CLANG_CC)                    \
                         -DCMAKE_CXX_COMPILER=$(CLANG_CXX)                 \
+			-DCMAKE_C_COMPILER_LAUNCHER=ccache \
+			-DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                         -DCMAKE_C_FLAGS="$(CFLAGS_ARCH)"                  \
                         -DCMAKE_PREFIX_PATH="$(S2E_PREFIX)"               \
                         -DLIBCPU_SRC_DIR=$(S2E_SRC)/libcpu                \
@@ -805,12 +827,14 @@ stamps/tools-debug-install: stamps/tools-debug-make
 
 stamps/guest-tools32-configure: CONFIGURE_COMMAND = cmake                                                                    \
                                                     -DCMAKE_C_COMPILER=$(CLANG_CC)                                           \
+						    -DCMAKE_C_COMPILER_LAUNCHER=ccache \
                                                     -DCMAKE_INSTALL_PREFIX=$(S2E_PREFIX)/bin/guest-tools32                   \
                                                     -DCMAKE_TOOLCHAIN_FILE=$(S2E_SRC)/guest/cmake/Toolchain-linux-i686.cmake \
                                                     $(S2E_SRC)/guest
 
 stamps/guest-tools64-configure: CONFIGURE_COMMAND = cmake                                                                       \
                                                     -DCMAKE_C_COMPILER=$(CLANG_CC)                                              \
+						    -DCMAKE_C_COMPILER_LAUNCHER=ccache \
                                                     -DCMAKE_INSTALL_PREFIX=$(S2E_PREFIX)/bin/guest-tools64                      \
                                                     -DCMAKE_TOOLCHAIN_FILE=$(S2E_SRC)/guest/cmake/Toolchain-linux-x86_64.cmake  \
                                                     $(S2E_SRC)/guest
