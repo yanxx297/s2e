@@ -696,6 +696,12 @@ ref<Expr> ConcatExpr::create(const ref<Expr> &l, const ref<Expr> &r) {
         if (lCE->isZero()) {
             return ZExtExpr::create(r, w);
         }
+	// concat(lCE, concat(rCE, x)) = concat(concat(lCE, rCE), x)
+	if (ConcatExpr *rc = dyn_cast<ConcatExpr>(r)){
+	    if(ConstantExpr *rCE = dyn_cast<ConstantExpr>(rc->getKid(0))){
+		return ConcatExpr::create(ConcatExpr::create(lCE, rCE),rc->getKid(1));
+	    }
+	}
     }
 
     // Merge contiguous Extracts
@@ -705,6 +711,12 @@ ref<Expr> ConcatExpr::create(const ref<Expr> &l, const ref<Expr> &r) {
                 ee_right->getOffset() + ee_right->getWidth() == ee_left->getOffset()) {
                 return ExtractExpr::create(ee_left->getExpr(), ee_right->getOffset(), w);
             }
+	    // Concat(Extract(SExt(x)), Extract(x))
+	    else if (SExtExpr *se = dyn_cast<SExtExpr>(ee_left->getExpr())){
+		if (se->getSrc() == ee_right->getExpr() &&  
+			ee_right->getOffset() + ee_right->getWidth() == ee_left->getOffset()) 
+		    return ExtractExpr::create(ee_left->getExpr(), ee_right->getOffset(), w);
+	    }
         }
     }
 
@@ -766,6 +778,15 @@ ref<Expr> ExtractExpr::create(const ref<Expr> &expr, unsigned off, Width w) {
         if (xw == w && off == 0) {
             return x;
         }
+	// Extract(Zext(Concat(..., x)))
+	else if (xw > w){
+	    if (ConcatExpr *ce = dyn_cast<ConcatExpr>(x)){
+		if(ConstantExpr *lce = dyn_cast<ConstantExpr>(ce->getKid(0))){
+		    auto re = ce->getKid(1);
+		    if(re->getWidth() == w) return re;
+		}
+	    }
+	}
         if (ew <= zew && ew >= xw && off == 0) {
             return ZExtExpr::create(x, ew);
         }
@@ -810,6 +831,11 @@ ref<Expr> ExtractExpr::create(const ref<Expr> &expr, unsigned off, Width w) {
         if (off >= ze->getSrc()->getWidth()) {
             return ConstantExpr::alloc(0, w);
         }
+    }
+
+    // Extract(Extract)
+    else if (ExtractExpr *ee = dyn_cast<ExtractExpr>(expr)){
+	return ExtractExpr::create(ee->getExpr(), off + ee->getOffset(), w);
     }
 
     __LIFT_CONST_SELECT_1(expr, off, w);
