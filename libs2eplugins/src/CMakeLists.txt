@@ -151,6 +151,7 @@ add_library(
     # yanxx297
     s2e/Plugins/InstructionTracer.cpp
     s2e/Plugins/TracePC.cpp
+    s2e/Plugins/ForkControl.cpp
 
     ${PROTO_SRCS} ${PROTO_HDRS}
 )
