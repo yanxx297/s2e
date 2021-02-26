@@ -32,23 +32,36 @@ namespace plugins {
 S2E_DEFINE_PLUGIN(ForkControl, "Turn forking on/off at eip", "", );
 
 void ForkControl::initialize() {
+    m_traceInstruction = s2e()->getConfig()->getBool(getConfigKey() + ".traceInstruction");
     m_forkStartAddr = s2e()->getConfig()->getInt(getConfigKey() + ".forkStartAddr");
     m_progStartAddr = s2e()->getConfig()->getInt(getConfigKey() + ".progStartAddr");
+    m_hasSymData = false;
 
-    s2e()->getCorePlugin()->onTranslateBlockStart.connect(sigc::mem_fun(*this, &ForkControl::slotTranslateBlockStart));
+    s2e()->getCorePlugin()->onTranslateInstructionStart.connect(sigc::mem_fun(*this, &ForkControl::slotTranslateInstructionStart));
+    s2e()->getCorePlugin()->onSymbolicVariableCreation.connect(sigc::mem_fun(*this, &ForkControl::slotSymbolicVariableCreation));
 }
 
-void ForkControl::slotTranslateBlockStart(ExecutionSignal *signal, S2EExecutionState *state, TranslationBlock *tb,
-                                      uint64_t pc) {
-    getDebugStream(state) << "TranslateBlockStart at " << hexval(pc) << "\n";
-    if (pc == m_forkStartAddr || pc == m_progStartAddr) {
-        signal->connect(sigc::mem_fun(*this, &ForkControl::slotExecuteBlockStart));
-        getDebugStream(state) << "Connect slotTranslateBlockStart at " << hexval(pc) << "\n";
+void ForkControl::slotSymbolicVariableCreation(S2EExecutionState *state, 
+	const std::string &name, 
+	const std::vector<klee::ref<klee::Expr>> &expr, 
+	const klee::ArrayPtr &ptr){
+    if(!m_hasSymData){
+	m_hasSymData = true;
     }
 }
 
-void ForkControl::slotExecuteBlockStart(S2EExecutionState *state, uint64_t pc) {
-    if (pc == m_forkStartAddr){
+void ForkControl::slotTranslateInstructionStart(ExecutionSignal *signal, S2EExecutionState *state, TranslationBlock *tb,
+                                      uint64_t pc) {
+    if (m_traceInstruction) {
+	getDebugStream(state) << "TranslateBlockStart at " << hexval(pc) << "\n";
+    }
+    if (pc == m_forkStartAddr || pc == m_progStartAddr) {
+        signal->connect(sigc::mem_fun(*this, &ForkControl::slotExecuteInstructionStart));
+    }
+}
+
+void ForkControl::slotExecuteInstructionStart(S2EExecutionState *state, uint64_t pc) {
+    if (pc == m_forkStartAddr && m_hasSymData){
 	state->enableForking();
     }
     else if (pc == m_progStartAddr){
