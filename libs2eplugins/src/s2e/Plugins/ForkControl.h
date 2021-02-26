@@ -38,11 +38,18 @@ public:
 
     void initialize();
 
-    void slotTranslateBlockStart(ExecutionSignal *, S2EExecutionState *state, TranslationBlock *tb, uint64_t pc);
+    void slotTranslateInstructionStart(ExecutionSignal *, S2EExecutionState *state, TranslationBlock *tb, uint64_t pc);
 
-    void slotExecuteBlockStart(S2EExecutionState *state, uint64_t pc);
+    void slotExecuteInstructionStart(S2EExecutionState *state, uint64_t pc);
+    void slotSymbolicVariableCreation(S2EExecutionState *state, 
+	    const std::string &name, 
+	    const std::vector<klee::ref<klee::Expr>>& expr, 
+	    const klee::ArrayPtr& ptr);
+
 
 private:
+    bool m_traceInstruction;
+    bool m_hasSymData;
     int m_forkStartAddr;
     int m_progStartAddr;
 };
