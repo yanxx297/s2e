@@ -79,6 +79,7 @@ private:
     /// Terminate if a trap (e.g. divide by zero) occurs
     bool m_terminateOnTrap;
 
+
     //
     // Handle the various commands emitted by the kernel
     //
