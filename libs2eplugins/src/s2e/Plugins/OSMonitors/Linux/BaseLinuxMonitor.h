@@ -99,6 +99,9 @@ protected:
     /// Terminate if a segment fault occurs
     bool m_terminateOnSegfault;
     bool m_terminateProcessGroupOnSegfault;
+    
+    int m_countPanic = 0;
+    int m_terminateOnPanic;
 
     uint64_t m_commandVersion;
     uint64_t m_commandSize;
@@ -204,7 +207,13 @@ public:
 
     virtual void handleKernelPanic(S2EExecutionState *state, uint64_t message, uint64_t messageSize) {
         std::string str = "kernel panic";
+	m_countPanic ++;
         state->mem()->readString(message, str, messageSize);
+	getWarningsStream(state) << "kernel panic: "<<str<<"\n";
+	getDebugStream(state) << "("<< m_terminateOnPanic << "/"<< m_countPanic <<") Panics\n";
+	if(m_countPanic >= m_terminateOnPanic && m_terminateOnPanic > 0) {
+	    exit(0);
+	}
         g_s2e->getExecutor()->terminateState(*state, str);
     }
 

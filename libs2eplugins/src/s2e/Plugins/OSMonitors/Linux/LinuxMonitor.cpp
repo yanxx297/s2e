@@ -65,6 +65,8 @@ void LinuxMonitor::initialize() {
     m_terminateProcessGroupOnSegfault = cfg->getBool(getConfigKey() + ".terminateProcessGroupOnSegfault", false);
     m_terminateOnTrap = cfg->getBool(getConfigKey() + ".terminateOnTrap", true);
 
+    m_terminateOnPanic = cfg->getInt(getConfigKey() + ".terminateOnPanic");
+
     m_commandSize = sizeof(S2E_LINUXMON_COMMAND);
     m_commandVersion = S2E_LINUXMON_COMMAND_VERSION;
 
