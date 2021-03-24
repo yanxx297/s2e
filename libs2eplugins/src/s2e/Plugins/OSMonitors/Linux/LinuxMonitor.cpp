@@ -72,11 +72,18 @@ void LinuxMonitor::initialize() {
 
     s2e()->getCorePlugin()->onInitializationComplete.connect(
         sigc::mem_fun(*this, &LinuxMonitor::onInitializationComplete));
+    s2e()->getCorePlugin()->onStateKill.connect(sigc::mem_fun(*this, &LinuxMonitor::slotStateKill));
 }
 
 void LinuxMonitor::onInitializationComplete(S2EExecutionState *state) {
     // Initialize the plugin state before BaseLinuxMonitor tries to access it.
     getPluginState(state, &LinuxMonitorState::factory);
+}
+
+void LinuxMonitor::slotStateKill(S2EExecutionState *state){
+    if(m_countPanic >= m_terminateOnPanic && m_terminateOnPanic > 0) {
+	exit(0);
+    }
 }
 
 void LinuxMonitor::handleSegfault(S2EExecutionState *state, const S2E_LINUXMON_COMMAND &cmd) {
