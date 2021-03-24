@@ -27,6 +27,7 @@
 #include <s2e/Plugin.h>
 #include <s2e/S2E.h>
 #include <s2e/cpu.h>
+#include <s2e/ConfigFile.h>
 
 #include <s2e/Plugins/Core/BaseInstructions.h>
 #include <s2e/Plugins/Core/Vmi.h>
@@ -186,9 +187,6 @@ public:
         state->mem()->readString(message, str, messageSize);
 	getWarningsStream(state) << "kernel panic: "<<str<<"\n";
 	getDebugStream(state) << "("<< m_terminateOnPanic << "/"<< m_countPanic <<") Panics\n";
-	if(m_countPanic >= m_terminateOnPanic && m_terminateOnPanic > 0) {
-	    exit(0);
-	}
         g_s2e->getExecutor()->terminateState(*state, str);
     }
 };

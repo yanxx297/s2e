@@ -54,6 +54,8 @@ void LinuxMonitor::initialize() {
 
     m_commandSize = sizeof(S2E_LINUXMON_COMMAND);
     m_commandVersion = S2E_LINUXMON_COMMAND_VERSION;
+
+    s2e()->getCorePlugin()->onStateKill.connect(sigc::mem_fun(*this, &LinuxMonitor::slotStateKill));
 }
 
 ///
@@ -83,6 +85,12 @@ uint64_t LinuxMonitor::getPid(S2EExecutionState *state) {
         return -1;
     } else {
         return pid;
+    }
+}
+
+void LinuxMonitor::slotStateKill(S2EExecutionState *state){
+    if(m_countPanic >= m_terminateOnPanic && m_terminateOnPanic > 0) {
+	exit(0);
     }
 }
 
