@@ -50,6 +50,7 @@ public:
 private:
     bool m_traceInstruction;
     bool m_hasSymData;
+    bool m_progStart;
     int m_forkStartAddr;
     int m_progStartAddr;
 };

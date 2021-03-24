@@ -36,6 +36,7 @@ void ForkControl::initialize() {
     m_forkStartAddr = s2e()->getConfig()->getInt(getConfigKey() + ".forkStartAddr");
     m_progStartAddr = s2e()->getConfig()->getInt(getConfigKey() + ".progStartAddr");
     m_hasSymData = false;
+    m_progStart = false;
 
     s2e()->getCorePlugin()->onTranslateInstructionStart.connect(sigc::mem_fun(*this, &ForkControl::slotTranslateInstructionStart));
     s2e()->getCorePlugin()->onSymbolicVariableCreation.connect(sigc::mem_fun(*this, &ForkControl::slotSymbolicVariableCreation));
@@ -47,6 +48,7 @@ void ForkControl::slotSymbolicVariableCreation(S2EExecutionState *state,
 	const klee::ArrayPtr &ptr){
     if(!m_hasSymData){
 	m_hasSymData = true;
+	state->disableForking();
     }
 }
 
@@ -60,12 +62,13 @@ void ForkControl::slotTranslateInstructionStart(ExecutionSignal *signal, S2EExec
     }
 }
 
-void ForkControl::slotExecuteInstructionStart(S2EExecutionState *state, uint64_t pc) {
-    if (pc == m_forkStartAddr && m_hasSymData){
+void ForkControl::slotExecuteInstructionStart(S2EExecutionState *state, uint64_t pc) {    
+    if (pc == m_forkStartAddr && m_hasSymData && m_progStart){
+	getDebugStream(state) << "Enable forking at " << hexval(pc) << "\n";
 	state->enableForking();
     }
     else if (pc == m_progStartAddr){
-	state->disableForking();
+	m_progStart = true;
     }
 }
 
