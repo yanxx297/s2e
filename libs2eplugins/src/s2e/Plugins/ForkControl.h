@@ -39,19 +39,20 @@ public:
     void initialize();
 
     void slotTranslateInstructionStart(ExecutionSignal *, S2EExecutionState *state, TranslationBlock *tb, uint64_t pc);
-
-    void slotExecuteInstructionStart(S2EExecutionState *state, uint64_t pc);
+    void slotProgStart(S2EExecutionState *state, uint64_t pc);
     void slotSymbolicVariableCreation(S2EExecutionState *state, 
 	    const std::string &name, 
 	    const std::vector<klee::ref<klee::Expr>>& expr, 
 	    const klee::ArrayPtr& ptr);
-
+    void slotInitializationComplete(S2EExecutionState *state);
+    void parseForkStartAddr(ConfigFile *cfg, const std::string &forkStartAddr);
+    void slotStateKill(S2EExecutionState *state); 
+    void slotForkStartAddr(S2EExecutionState *state, uint64_t pc);
 
 private:
-    bool m_traceInstruction;
     bool m_hasSymData;
     bool m_progStart;
-    int m_forkStartAddr;
+    std::map<uint64_t, int> m_forkStartAddr;
     int m_progStartAddr;
 };
 
