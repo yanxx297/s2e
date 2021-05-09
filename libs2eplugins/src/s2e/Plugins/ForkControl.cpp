@@ -31,15 +31,81 @@ namespace plugins {
 
 S2E_DEFINE_PLUGIN(ForkControl, "Turn forking on/off at eip", "", );
 
+class ForkControlState: public PluginState {
+    private: 
+	std::map<uint64_t, int> m_forkStartAddrCnt;
+
+    public:
+	ForkControlState(){}
+
+	virtual ~ForkControlState(){}
+
+	static PluginState *factory(Plugin*, S2EExecutionState*){
+	    return new ForkControlState();
+	}
+
+	ForkControlState *clone() const {
+	    return new ForkControlState(*this);
+	}
+
+	void setCounter(ConfigFile::integer_list l){
+	    if(l.size() % 2 != 0)
+		exit(-1);
+	    for(int i = 0; i < l.size(); i += 2){
+		m_forkStartAddrCnt[l[i]] = 0;
+	    }
+	}
+
+	bool hitForkStartAddr(uint64_t pc, int target){
+	    if(m_forkStartAddrCnt.find(pc) == m_forkStartAddrCnt.end())
+		return false;
+	    m_forkStartAddrCnt[pc] ++;
+	    if (m_forkStartAddrCnt[pc] >= target){
+		return true;
+	    }
+	    return false;
+	}
+
+	int getCount(uint64_t pc){
+	    return m_forkStartAddrCnt[pc];
+	}
+
+	bool isForkStartAddr(uint64_t pc){
+	    return (m_forkStartAddrCnt.find(pc) != m_forkStartAddrCnt.end());
+	}
+
+	void resetForkStartAddr(){
+	    for(std::map<uint64_t, int>::iterator it = m_forkStartAddrCnt.begin(); it != m_forkStartAddrCnt.end(); ++it)
+		it->second = 0;
+	}
+};
+
 void ForkControl::initialize() {
-    m_traceInstruction = s2e()->getConfig()->getBool(getConfigKey() + ".traceInstruction");
-    m_forkStartAddr = s2e()->getConfig()->getInt(getConfigKey() + ".forkStartAddr");
     m_progStartAddr = s2e()->getConfig()->getInt(getConfigKey() + ".progStartAddr");
     m_hasSymData = false;
     m_progStart = false;
 
+    parseForkStartAddr(s2e()->getConfig(), getConfigKey() + ".forkStartAddr");
+
     s2e()->getCorePlugin()->onTranslateInstructionStart.connect(sigc::mem_fun(*this, &ForkControl::slotTranslateInstructionStart));
     s2e()->getCorePlugin()->onSymbolicVariableCreation.connect(sigc::mem_fun(*this, &ForkControl::slotSymbolicVariableCreation));
+    s2e()->getCorePlugin()->onInitializationComplete.connect(sigc::mem_fun(*this, &ForkControl::slotInitializationComplete));
+    s2e()->getCorePlugin()->onStateKill.connect(sigc::mem_fun(*this, &ForkControl::slotStateKill));
+}
+
+void ForkControl::parseForkStartAddr(ConfigFile *cfg, const std::string &forkStartAddr){
+    ConfigFile::integer_list l = cfg->getIntegerList(forkStartAddr);
+    if(l.size() % 2 != 0)
+	exit(-1);
+    for(int i = 0; i < l.size(); i += 2){
+	m_forkStartAddr[l[i]] = l[i+1];
+    }
+} 
+
+void ForkControl::slotInitializationComplete(S2EExecutionState *state){
+    DECLARE_PLUGINSTATE(ForkControlState, state);
+    ConfigFile::integer_list l = s2e()->getConfig()->getIntegerList(getConfigKey() + ".forkStartAddr");
+    plgState->setCounter(l);
 }
 
 void ForkControl::slotSymbolicVariableCreation(S2EExecutionState *state, 
@@ -54,22 +120,39 @@ void ForkControl::slotSymbolicVariableCreation(S2EExecutionState *state,
 
 void ForkControl::slotTranslateInstructionStart(ExecutionSignal *signal, S2EExecutionState *state, TranslationBlock *tb,
                                       uint64_t pc) {
-    if (m_traceInstruction) {
-	getDebugStream(state) << "TranslateBlockStart at " << hexval(pc) << "\n";
+    if(pc == m_progStartAddr){
+	signal->connect(sigc::mem_fun(*this, &ForkControl::slotProgStart));
     }
-    if (pc == m_forkStartAddr || pc == m_progStartAddr) {
-        signal->connect(sigc::mem_fun(*this, &ForkControl::slotExecuteInstructionStart));
+    if (m_hasSymData && m_progStart){
+	DECLARE_PLUGINSTATE(ForkControlState, state);
+	if(plgState->isForkStartAddr(pc)){
+	    getDebugStream(state) << "connect slotForkStartAddr at " << hexval(pc) << "\n";
+	    signal->connect(sigc::mem_fun(*this, &ForkControl::slotForkStartAddr));
+	}
     }
 }
 
-void ForkControl::slotExecuteInstructionStart(S2EExecutionState *state, uint64_t pc) {    
-    if (pc == m_forkStartAddr && m_hasSymData && m_progStart){
-	getDebugStream(state) << "Enable forking at " << hexval(pc) << "\n";
-	state->enableForking();
-    }
-    else if (pc == m_progStartAddr){
+void ForkControl::slotProgStart(S2EExecutionState *state, uint64_t pc){
+    if (pc == m_progStartAddr){
+	getDebugStream(state)<<"Program start at "<<hexval(pc)<<"\n";
 	m_progStart = true;
     }
+}
+
+void ForkControl::slotForkStartAddr(S2EExecutionState *state, uint64_t pc){
+    DECLARE_PLUGINSTATE(ForkControlState, state);
+    if (m_hasSymData && m_progStart){
+	if(plgState->hitForkStartAddr(pc, m_forkStartAddr[pc])){
+	    getDebugStream(state) << "hit "<<hexval(pc)<<" by "<<plgState->getCount(pc)<<"\n";
+	    getDebugStream(state) << "Enable forking at " << hexval(pc) << "\n";
+	    state->enableForking();
+	}
+    }
+}
+
+void ForkControl::slotStateKill(S2EExecutionState *state) {
+    DECLARE_PLUGINSTATE(ForkControlState, state);
+    plgState->resetForkStartAddr();
 }
 
 } // namespace plugins
