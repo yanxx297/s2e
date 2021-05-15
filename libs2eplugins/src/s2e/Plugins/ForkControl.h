@@ -40,6 +40,7 @@ public:
 
     void slotTranslateInstructionStart(ExecutionSignal *, S2EExecutionState *state, TranslationBlock *tb, uint64_t pc);
     void slotProgStart(S2EExecutionState *state, uint64_t pc);
+    void onStateForkDecide(S2EExecutionState *state, bool *doFork);
     void slotSymbolicVariableCreation(S2EExecutionState *state, 
 	    const std::string &name, 
 	    const std::vector<klee::ref<klee::Expr>>& expr, 
@@ -47,7 +48,6 @@ public:
     void slotInitializationComplete(S2EExecutionState *state);
     void parseForkStartAddr(ConfigFile *cfg, const std::string &forkStartAddr);
     void slotStateKill(S2EExecutionState *state); 
-    void slotForkStartAddr(S2EExecutionState *state, uint64_t pc);
 
 private:
     bool m_hasSymData;
