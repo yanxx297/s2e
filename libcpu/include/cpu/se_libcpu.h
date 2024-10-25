@@ -37,12 +37,18 @@ typedef void (*se_do_interrupt_all_t)(int intno, int is_int, int error_code, uin
 
 void se_do_interrupt_all(int intno, int is_int, int error_code, target_ulong next_eip, int is_hw);
 
-#define MEM_TRACE_FLAG_IO 1
-#define MEM_TRACE_FLAG_WRITE 2
+#define MEM_TRACE_FLAG_IO      1
+#define MEM_TRACE_FLAG_WRITE   2
 #define MEM_TRACE_FLAG_PRECISE 4
-#define MEM_TRACE_FLAG_PLUGIN 8
+#define MEM_TRACE_FLAG_PLUGIN  8
 
 enum special_instruction_t { RDTSC, SYSENTER, SYSCALL, PUSHIM };
+
+struct special_instruction_data_t {
+    union {
+        uint64_t immediate_value;
+    };
+};
 
 struct se_libcpu_interface_t {
     unsigned size;
@@ -84,7 +90,6 @@ struct se_libcpu_interface_t {
         void (*flush_tb_cache)();
         void (*set_tb_function)(void *se_tb, void *llvmFunction);
         int (*is_tb_instrumented)(void *se_tb);
-        void (*increment_tb_stats)(void *se_tb);
     } tb;
 
     /* TLB management */
@@ -119,16 +124,6 @@ struct se_libcpu_interface_t {
         int (*is_vmem_symbolic)(uint64_t vaddr, unsigned size);
 
         uintptr_t (*get_host_address)(uint64_t paddr);
-
-        uint8_t (*__ldb_mmu_trace)(uint8_t *host_addr, target_ulong vaddr);
-        uint16_t (*__ldw_mmu_trace)(uint16_t *host_addr, target_ulong vaddr);
-        uint32_t (*__ldl_mmu_trace)(uint32_t *host_addr, target_ulong vaddr);
-        uint64_t (*__ldq_mmu_trace)(uint64_t *host_addr, target_ulong vaddr);
-
-        void (*__stb_mmu_trace)(uint8_t *host_addr, target_ulong vaddr);
-        void (*__stw_mmu_trace)(uint16_t *host_addr, target_ulong vaddr);
-        void (*__stl_mmu_trace)(uint32_t *host_addr, target_ulong vaddr);
-        void (*__stq_mmu_trace)(uint64_t *host_addr, target_ulong vaddr);
     } mem;
 
     /* ExprInterface */
@@ -206,7 +201,8 @@ struct se_libcpu_interface_t {
 
         /** Called by cpu_gen_code() after translation of certain special types of instructions */
         void (*on_translate_special_instruction_end)(void *context, struct TranslationBlock *tb, uint64_t pc,
-                                                     enum special_instruction_t type, int update_pc);
+                                                     enum special_instruction_t type,
+                                                     const struct special_instruction_data_t *data, int update_pc);
 
         /** Called by cpu_gen_code() after translation of each instruction */
         void (*on_translate_instruction_end)(void *context, struct TranslationBlock *tb, uint64_t pc, uint64_t nextpc);
@@ -228,6 +224,10 @@ struct se_libcpu_interface_t {
     struct {
         void (*debug)(const char *fmt, ...);
     } log;
+
+    struct {
+        int (*screendump)(const char *filename);
+    } upcalls;
 };
 
 extern struct se_libcpu_interface_t g_sqi;
@@ -251,7 +251,7 @@ uint64_t tcg_llvm_trace_port_access(uint64_t port, uint64_t value, unsigned bits
 uint64_t tcg_llvm_trace_mmio_access(uint64_t physaddr, uint64_t value, unsigned bytes, int isWrite);
 
 void tcg_llvm_write_mem_io_vaddr(uint64_t value, int reset);
-void tcg_llvm_get_value(void *addr, unsigned nbytes, bool addConstraint);
+uint64_t tcg_llvm_get_value(uint64_t value, bool addConstraint);
 #endif
 
 #ifdef __cplusplus

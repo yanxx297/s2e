@@ -223,8 +223,9 @@ void S2EExecutionStateRegisters::writeSymbolicRegion(unsigned offset, const void
         auto wos = m_symbolicRegs;
         bool oldAllConcrete = wos->isAllConcrete();
 
-        for (unsigned i = 0; i < size; ++i)
-            wos->write8(offset + i, buf[i]);
+        for (unsigned i = 0; i < size; ++i) {
+            wos->write(offset + i, buf[i]);
+        }
 
         bool newAllConcrete = wos->isAllConcrete();
         if ((oldAllConcrete != newAllConcrete) && (wos->notifyOnConcretenessChange())) {
@@ -379,15 +380,15 @@ klee::ref<klee::Expr> S2EExecutionStateRegisters::read(unsigned offset, klee::Ex
     if (isConcrete) {
         switch (width) {
             case klee::Expr::Bool:
-                return klee::ConstantExpr::create(read<uint8>(offset) & 1, width);
+                return klee::ConstantExpr::create(read<uint8_t>(offset) & 1, width);
             case klee::Expr::Int8:
-                return klee::ConstantExpr::create(read<uint8>(offset), width);
+                return klee::ConstantExpr::create(read<uint8_t>(offset), width);
             case klee::Expr::Int16:
-                return klee::ConstantExpr::create(read<uint16>(offset), width);
+                return klee::ConstantExpr::create(read<uint16_t>(offset), width);
             case klee::Expr::Int32:
-                return klee::ConstantExpr::create(read<uint32>(offset), width);
+                return klee::ConstantExpr::create(read<uint32_t>(offset), width);
             case klee::Expr::Int64:
-                return klee::ConstantExpr::create(read<uint64>(offset), width);
+                return klee::ConstantExpr::create(read<uint64_t>(offset), width);
             default:
                 return nullptr;
         }

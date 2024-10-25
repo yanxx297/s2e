@@ -21,20 +21,26 @@
 /// SOFTWARE.
 ///
 
-extern "C" {
 // clang-format off
 #include <cpu/i386/cpu.h>
+#include <tcg/tcg.h>
 #include <tcg/tcg-op.h>
+
+extern "C" {
+#include <tcg/exec/helper-proto.h>
+#include <tcg/exec/helper-gen.h>
+}
 
 #include <cpu/exec.h>
 
 #include <timer.h>
-#include <qdict.h>
+#include <qapi/qmp/qdict.h>
 
 #define s2e_gen_pc_update instr_gen_pc_update
 #define s2e_gen_flags_update instr_gen_flags_update
-
 // clang-format on
+
+extern "C" {
 extern struct CPUX86State *env;
 void s2e_gen_pc_update(void *context, target_ulong pc, target_ulong cs_base);
 void s2e_gen_flags_update(void *context);
@@ -46,11 +52,11 @@ void s2e_gen_flags_update(void *context);
 #include <s2e/S2EExecutionState.h>
 #include <s2e/S2EExecutor.h>
 
-#include <s2e/s2e_libcpu.h>
 #include <s2e/s2e_config.h>
+#include <s2e/s2e_libcpu.h>
 
-#include <s2e/CorePlugin.h>
 #include <klee/Common.h>
+#include <s2e/CorePlugin.h>
 
 using namespace s2e;
 
@@ -61,7 +67,7 @@ extern "C" {
 
 int g_s2e_enable_signals = true;
 
-void s2e_tcg_execution_handler(void *signal, uint64_t pc) {
+void helper_s2e_tcg_execution_handler(void *signal, uint64_t pc) {
     try {
         ExecutionSignal *s = (ExecutionSignal *) signal;
         if (g_s2e_enable_signals) {
@@ -72,7 +78,7 @@ void s2e_tcg_execution_handler(void *signal, uint64_t pc) {
     }
 }
 
-void s2e_tcg_custom_instruction_handler(uint64_t arg) {
+void helper_s2e_tcg_custom_instruction_handler(uint64_t arg) {
     assert(!g_s2e->getCorePlugin()->onCustomInstruction.empty() &&
            "You must activate a plugin that uses custom instructions.");
 
@@ -84,12 +90,8 @@ void s2e_tcg_custom_instruction_handler(uint64_t arg) {
 }
 
 void s2e_tcg_emit_custom_instruction(uint64_t arg) {
-    TCGv_i64 t0 = tcg_const_i64(arg);
-
-    TCGTemp *args[1] = {tcgv_i64_temp(t0)};
-    tcg_gen_callN((void *) s2e_tcg_custom_instruction_handler, nullptr, 1, args);
-
-    tcg_temp_free_i64(t0);
+    TCGv_i64 t0 = tcg_constant_i64(arg);
+    gen_helper_s2e_tcg_custom_instruction_handler(t0);
 }
 
 /* Instrument generated code to emit signal on execution */
@@ -99,24 +101,17 @@ void s2e_tcg_emit_custom_instruction(uint64_t arg) {
 static void s2e_tcg_instrument_code(ExecutionSignal *signal, uint64_t pc, uint64_t nextpc = -1) {
     if (nextpc != (uint64_t) -1) {
 #if TCG_TARGET_REG_BITS == 64 && defined(TARGET_X86_64)
-        TCGv_i64 tpc = tcg_const_i64((tcg_target_ulong) nextpc);
+        TCGv_i64 tpc = tcg_constant_i64((tcg_target_ulong) nextpc);
         tcg_gen_st_i64(tpc, cpu_env, offsetof(CPUX86State, eip));
-        tcg_temp_free_i64(tpc);
 #else
-        TCGv_i32 tpc = tcg_const_i32((tcg_target_ulong) nextpc);
+        TCGv_i32 tpc = tcg_constant_i32((tcg_target_ulong) nextpc);
         tcg_gen_st_i32(tpc, cpu_env, offsetof(CPUX86State, eip));
-        tcg_temp_free_i32(tpc);
 #endif
     }
 
-    TCGv_ptr t0 = tcg_const_local_ptr(signal);
-    TCGv_i64 t1 = tcg_const_i64(pc);
-    TCGTemp *args[2] = {tcgv_ptr_temp(t0), tcgv_i64_temp(t1)};
-
-    tcg_gen_callN((void *) s2e_tcg_execution_handler, nullptr, 2, args);
-
-    tcg_temp_free_i64(t1);
-    tcg_temp_free_ptr(t0);
+    TCGv_ptr t0 = tcg_constant_ptr(signal);
+    TCGv_i64 t1 = tcg_constant_i64(pc);
+    gen_helper_s2e_tcg_execution_handler(t0, t1);
 }
 
 void s2e_on_translate_soft_interrupt_start(void *context, TranslationBlock *tb, uint64_t pc, unsigned vector) {
@@ -206,7 +201,8 @@ void s2e_on_translate_instruction_start(void *context, TranslationBlock *tb, uin
 }
 
 void s2e_on_translate_special_instruction_end(void *context, TranslationBlock *tb, uint64_t pc,
-                                              enum special_instruction_t type, int update_pc) {
+                                              enum special_instruction_t type, const special_instruction_data_t *data,
+                                              int update_pc) {
     assert(g_s2e_state->isActive());
 
     S2ETranslationBlock *se_tb = static_cast<S2ETranslationBlock *>(tb->se_tb);
@@ -214,7 +210,7 @@ void s2e_on_translate_special_instruction_end(void *context, TranslationBlock *t
     assert(signal->empty());
 
     try {
-        g_s2e->getCorePlugin()->onTranslateSpecialInstructionEnd.emit(signal, g_s2e_state, tb, pc, type);
+        g_s2e->getCorePlugin()->onTranslateSpecialInstructionEnd.emit(signal, g_s2e_state, tb, pc, type, data);
         if (!signal->empty()) {
 
             if (update_pc) {
@@ -343,7 +339,6 @@ static CPUTimer *s_timer = nullptr;
 
 static void s2e_timer_cb(void *opaque) {
     CorePlugin *c = (CorePlugin *) opaque;
-    g_s2e->getExecutor()->updateStats(g_s2e_state);
     c->onTimer.emit();
     libcpu_mod_timer(s_timer, libcpu_get_clock_ms(rt_clock) + 1000);
 }
@@ -371,42 +366,6 @@ void s2e_after_memory_access(uint64_t vaddr, uint64_t value, unsigned size, unsi
     } catch (s2e::CpuExitException &) {
         longjmp(env->jmp_env, 1);
     }
-}
-
-uint8_t __ldb_mmu_trace(uint8_t *host_addr, target_ulong vaddr) {
-    s2e_after_memory_access(vaddr, *host_addr, 1, 0, (uintptr_t) GETPC());
-    return *host_addr;
-}
-
-uint16_t __ldw_mmu_trace(uint16_t *host_addr, target_ulong vaddr) {
-    s2e_after_memory_access(vaddr, *host_addr, 2, 0, (uintptr_t) GETPC());
-    return *host_addr;
-}
-
-uint32_t __ldl_mmu_trace(uint32_t *host_addr, target_ulong vaddr) {
-    s2e_after_memory_access(vaddr, *host_addr, 4, 0, (uintptr_t) GETPC());
-    return *host_addr;
-}
-
-uint64_t __ldq_mmu_trace(uint64_t *host_addr, target_ulong vaddr) {
-    s2e_after_memory_access(vaddr, *host_addr, 8, 0, (uintptr_t) GETPC());
-    return *host_addr;
-}
-
-void __stb_mmu_trace(uint8_t *host_addr, target_ulong vaddr) {
-    s2e_after_memory_access(vaddr, *host_addr, 1, MEM_TRACE_FLAG_WRITE, (uintptr_t) GETPC());
-}
-
-void __stw_mmu_trace(uint16_t *host_addr, target_ulong vaddr) {
-    s2e_after_memory_access(vaddr, *host_addr, 2, MEM_TRACE_FLAG_WRITE, (uintptr_t) GETPC());
-}
-
-void __stl_mmu_trace(uint32_t *host_addr, target_ulong vaddr) {
-    s2e_after_memory_access(vaddr, *host_addr, 4, MEM_TRACE_FLAG_WRITE, (uintptr_t) GETPC());
-}
-
-void __stq_mmu_trace(uint64_t *host_addr, target_ulong vaddr) {
-    s2e_after_memory_access(vaddr, *host_addr, 8, MEM_TRACE_FLAG_WRITE, (uintptr_t) GETPC());
 }
 
 void s2e_on_page_fault(uint64_t addr, int is_write, void *retaddr) {

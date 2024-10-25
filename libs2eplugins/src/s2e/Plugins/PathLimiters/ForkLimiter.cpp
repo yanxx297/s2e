@@ -58,7 +58,8 @@ void ForkLimiter::initialize() {
     m_timerTicks = 0;
 }
 
-void ForkLimiter::onStateForkDecide(S2EExecutionState *state, bool *doFork) {
+void ForkLimiter::onStateForkDecide(S2EExecutionState *state, const klee::ref<klee::Expr> &condition,
+                                    bool &allowForking) {
     auto module = m_detector->getCurrentDescriptor(state);
     if (!module) {
         return;
@@ -70,8 +71,8 @@ void ForkLimiter::onStateForkDecide(S2EExecutionState *state, bool *doFork) {
         return;
     }
 
-    if (m_forkCount[module->Name][curPc] > m_limit) {
-        *doFork = false;
+    if (m_forkCount[module->Name][curPc] >= m_limit) {
+        allowForking = false;
     }
 }
 

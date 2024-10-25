@@ -261,8 +261,6 @@ public:
 
     void initialize();
 
-    sigc::signal<void, S2EExecutionState *> onProcessOrThreadSwitch;
-
     sigc::signal<void, S2EExecutionState *, const S2E_WINMON2_ACCESS_FAULT &> onAccessFault;
 
     sigc::signal<void, S2EExecutionState *, const S2E_WINMON2_ALLOCATE_VM &> onNtAllocateVirtualMemory;
@@ -311,7 +309,8 @@ private:
     uint64_t m_cachedEprocess;
 
     void onTranslateSpecialInstructionEnd(ExecutionSignal *signal, S2EExecutionState *state, TranslationBlock *tb,
-                                          uint64_t pc, enum special_instruction_t type);
+                                          uint64_t pc, enum special_instruction_t type,
+                                          const special_instruction_data_t *data);
 
     void onTranslateSoftInterruptStart(ExecutionSignal *signal, S2EExecutionState *state, TranslationBlock *tb,
                                        uint64_t pc, unsigned vector);

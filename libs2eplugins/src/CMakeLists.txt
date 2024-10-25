@@ -27,10 +27,12 @@ add_library(
     s2e/Plugins/Core/BaseInstructions.cpp
     s2e/Plugins/Core/HostFiles.cpp
     s2e/Plugins/Core/Vmi.cpp
+    s2e/Plugins/Core/StatsTracker.cpp
 
     # Support plugins
     s2e/Plugins/Support/KeyValueStore.cpp
     s2e/Plugins/Support/WebServiceInterface.cpp
+    s2e/Plugins/Support/Screenshot.cpp
 
     # OS support
     s2e/Plugins/OSMonitors/ModuleDescriptor.cpp
@@ -50,10 +52,12 @@ add_library(
     # Guest support
     s2e/Plugins/OSMonitors/Support/ModuleExecutionDetector.cpp
     s2e/Plugins/OSMonitors/Support/ProcessExecutionDetector.cpp
+    s2e/Plugins/OSMonitors/Support/ThreadExecutionDetector.cpp
     s2e/Plugins/OSMonitors/Support/ModuleMap.cpp
     s2e/Plugins/OSMonitors/Support/MemoryMap.cpp
     s2e/Plugins/OSMonitors/Support/MemUtils.cpp
     s2e/Plugins/OSMonitors/Support/GuestCodeHooking.cpp
+    s2e/Plugins/OSMonitors/Support/ITracker.cpp
     s2e/Plugins/OSMonitors/OSMonitor.cpp
 
     # CGC support
@@ -114,7 +118,13 @@ add_library(
 
     # Misc plugins
     s2e/Plugins/Example.cpp
+
+    # Analysis plugins
     s2e/Plugins/Analyzers/CacheSim.cpp
+    s2e/Plugins/Analyzers/AddressTracker.cpp
+    s2e/Plugins/Analyzers/CFIChecker.cpp
+    s2e/Plugins/Analyzers/Tickler.cpp
+
 
     # Execution monitors
     s2e/Plugins/ExecutionMonitors/CallSiteMonitor.cpp
@@ -161,7 +171,8 @@ set(WERROR_FLAGS "-Werror -Wno-zero-length-array -Wno-c99-extensions          \
                   -Wno-zero-length-array")
 
 set(COMMON_FLAGS "-D__STDC_FORMAT_MACROS -D_GNU_SOURCE -DNEED_CPU_H  -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -DTARGET_PHYS_ADDR_BITS=64")
-set(COMMON_FLAGS "${COMMON_FLAGS} -Wall -fPIC -fno-strict-aliasing -fexceptions -std=c++14")
+set(COMMON_FLAGS "${COMMON_FLAGS} -DLIBS2E_PLUGINS")
+set(COMMON_FLAGS "${COMMON_FLAGS} -Wall -fPIC -fno-strict-aliasing -fexceptions -std=c++17")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${WERROR_FLAGS} ${COMMON_FLAGS}")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${WERROR_FLAGS} ${COMMON_FLAGS}")

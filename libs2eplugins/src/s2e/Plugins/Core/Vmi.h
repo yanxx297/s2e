@@ -31,10 +31,8 @@
 
 #include <llvm/ADT/DenseSet.h>
 #include <llvm/Support/Path.h>
-#include <vmi/ElfDwarf.h>
 #include <vmi/ExecutableFile.h>
 #include <vmi/PEFile.h>
-#include <vmi/Vmi.h>
 
 #include <vmi/FileProvider.h>
 #include <vmi/RegisterProvider.h>
@@ -78,6 +76,7 @@ private:
     std::vector<std::string> m_baseDirectories;
     std::unordered_map<std::string /* guestfs path */, std::shared_ptr<vmi::ExecutableFile>> m_cache;
 
+    void findModule(const std::string &module, std::vector<std::string> &paths);
     bool findModule(const std::string &module, std::string &path);
     bool parseDirectories(ConfigFile *cfg, const std::string &baseDirsKey);
 

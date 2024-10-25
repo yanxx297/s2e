@@ -21,9 +21,7 @@
 /// SOFTWARE.
 ///
 
-extern "C" {
-#include <qstring.h>
-}
+#include <qapi/qmp/qstring.h>
 
 #include <s2e/ConfigFile.h>
 #include <s2e/Plugins/Core/Events.h>
@@ -159,7 +157,7 @@ void ResourceMonitor::dropStates() {
     assert(executor->getStatesCount() > 0 && "no states left to remove\n");
 
     // try to kill 5% of the states
-    size_t nrStatesToTerminate = (size_t)(0.05 * executor->getStatesCount());
+    size_t nrStatesToTerminate = (size_t) (0.05 * executor->getStatesCount());
 
     if (nrStatesToTerminate < 1 && executor->getStatesCount() > 0) {
         nrStatesToTerminate = 1; // kill at least one state
@@ -201,12 +199,13 @@ bool ResourceMonitor::memoryLimitExceeded() {
     }
 }
 
-void ResourceMonitor::onStateForkDecide(S2EExecutionState *state, bool *doFork) {
+void ResourceMonitor::onStateForkDecide(S2EExecutionState *state, const klee::ref<klee::Expr> &condition,
+                                        bool &allowForking) {
     // Do not set the value to true, it is true by default.
     // Plugins can set it to false if they want to change the behavior without
     // interfering with each other.
     if (memoryLimitExceeded()) {
-        *doFork = false;
+        allowForking = false;
     }
 }
 

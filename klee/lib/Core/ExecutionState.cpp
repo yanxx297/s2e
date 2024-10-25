@@ -8,10 +8,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "klee/ExecutionState.h"
-#include "klee/CoreStats.h"
+#include "klee/Stats/CoreStats.h"
 
 #include "klee/Internal/Module/Cell.h"
-#include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 
@@ -21,6 +20,7 @@
 #include "klee/util/ExprPPrinter.h"
 
 #include "llvm/IR/Function.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/Support/CommandLine.h"
 
 #include <cassert>
@@ -52,45 +52,25 @@ cl::opt<bool> PrintConcretizedExpression("print-concretized-expression", cl::des
 
 /***/
 
-StackFrame::StackFrame(KInstIterator _caller, KFunction *_kf) : caller(_caller), kf(_kf), callPathNode(0), varargs(0) {
-    locals = new Cell[kf->numRegisters];
-}
-
-StackFrame::StackFrame(const StackFrame &s)
-    : caller(s.caller), kf(s.kf), callPathNode(s.callPathNode), allocas(s.allocas), varargs(s.varargs) {
-    locals = new Cell[s.kf->numRegisters];
-    for (unsigned i = 0; i < s.kf->numRegisters; i++)
-        locals[i] = s.locals[i];
-}
-
-StackFrame::~StackFrame() {
-    delete[] locals;
-}
-
-/***/
-
 BitfieldSimplifier ExecutionState::s_simplifier;
 std::set<ObjectKey, ObjectKeyLTS> ExecutionState::s_ignoredMergeObjects;
 
 ExecutionState::ExecutionState(KFunction *kf)
-    : fakeState(false), pc(kf->instructions), prevPC(nullptr), addressSpace(this), queryCost(0.), forkDisabled(false),
-      concolics(new Assignment(true)) {
+    : pc(kf->getInstructions()), prevPC(nullptr), addressSpace(this), forkDisabled(false),
+      concolics(Assignment::create(true)) {
     pushFrame(0, kf);
 }
 
-ExecutionState::ExecutionState(const std::vector<ref<Expr>> &assumptions)
-    : fakeState(true), addressSpace(this), queryCost(0.), concolics(new Assignment(true)) {
-}
-
 ExecutionState::~ExecutionState() {
-    while (!stack.empty())
+    while (!stack.empty()) {
         popFrame();
+    }
 }
 
 ExecutionState *ExecutionState::clone() {
     ExecutionState *state = new ExecutionState(*this);
     state->addressSpace.state = state;
-    state->concolics = new Assignment(true);
+    state->concolics = Assignment::create(true);
     return state;
 }
 
@@ -105,11 +85,6 @@ void ExecutionState::addressSpaceObjectSplit(const ObjectStateConstPtr &oldObjec
 void ExecutionState::addressSpaceSymbolicStatusChange(const ObjectStatePtr &object, bool becameConcrete) {
 }
 
-ExecutionState *ExecutionState::branch() {
-    ExecutionState *falseState = clone();
-    return falseState;
-}
-
 void ExecutionState::pushFrame(KInstIterator caller, KFunction *kf) {
     stack.push_back(StackFrame(caller, kf));
 }
@@ -121,26 +96,6 @@ void ExecutionState::popFrame() {
     }
     stack.pop_back();
 }
-
-///
-
-std::string ExecutionState::getFnAlias(std::string fn) {
-    std::map<std::string, std::string>::iterator it = fnAliases.find(fn);
-    if (it != fnAliases.end())
-        return it->second;
-    else
-        return "";
-}
-
-void ExecutionState::addFnAlias(std::string old_fn, std::string new_fn) {
-    fnAliases[old_fn] = new_fn;
-}
-
-void ExecutionState::removeFnAlias(std::string fn) {
-    fnAliases.erase(fn);
-}
-
-/**/
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const MemoryMap &mm) {
     os << "{";
@@ -166,8 +121,8 @@ bool ExecutionState::merge(const ExecutionState &b) {
             m << "merge failed: different KLEE pc\n" << *(*pc).inst << "\n" << *(*b.pc).inst << "\n";
 
             std::stringstream ss;
-            this->printStack(nullptr, ss);
-            b.printStack(nullptr, ss);
+            this->printStack(ss);
+            b.printStack(ss);
             m << ss.str() << "\n";
         }
         return false;
@@ -256,37 +211,10 @@ bool ExecutionState::merge(const ExecutionState &b) {
         if (ai->first != bi->first) {
             if (DebugLogStateMerge) {
                 if (ai->first < bi->first) {
-                    m << "\t\tB misses binding for: " << ai->first.address << "\n";
-                } else {
-                    m << "\t\tA misses binding for: " << bi->first.address << "\n";
-                }
-            }
-            return false;
-        }
-        if (ai->second != bi->second) {
-            if (DebugLogStateMerge)
-                llvm::errs() << "\t\tmutated: " << ai->first.address << "\n";
-            mutated.insert(ai->first);
-        }
-    }
-    if (ai != ae || bi != be) {
-        if (DebugLogStateMerge) {
-            m << "\t\tmappings differ\n";
-        }
-        return false;
-    }
-
-    for (; ai != ae && bi != be; ++ai, ++bi) {
-        if (ai->first != bi->first) {
-            if (DebugLogStateMerge) {
-                if (ai->first < bi->first) {
                     m << "\t\tB misses binding for: " << hexval(ai->first.address) << "\n";
                 } else {
                     m << "\t\tA misses binding for: " << hexval(bi->first.address) << "\n";
                 }
-            }
-            if (DebugLogStateMerge) {
-                m << "merge failed: different callstacks" << '\n';
             }
             return false;
         }
@@ -304,6 +232,12 @@ bool ExecutionState::merge(const ExecutionState &b) {
             }
             mutated.insert(mo);
         }
+    }
+    if (ai != ae || bi != be) {
+        if (DebugLogStateMerge) {
+            m << "\t\tmappings differ\n";
+        }
+        return false;
     }
 
     // merge stack
@@ -330,10 +264,10 @@ bool ExecutionState::merge(const ExecutionState &b) {
     for (; itA != stack.end(); ++itA, ++itB) {
         StackFrame &af = *itA;
         const StackFrame &bf = *itB;
-        for (unsigned i = 0; i < af.kf->numRegisters; i++) {
+        for (unsigned i = 0; i < af.kf->getNumRegisters(); i++) {
             ref<Expr> &av = af.locals[i].value;
             const ref<Expr> &bv = bf.locals[i].value;
-            if (av.isNull() || bv.isNull()) {
+            if (!av || !bv) {
                 // if one is null then by implication (we are at same pc)
                 // we cannot reuse this local, so just ignore
             } else {
@@ -387,12 +321,12 @@ bool ExecutionState::merge(const ExecutionState &b) {
     return true;
 }
 
-void ExecutionState::printStack(KInstruction *target, std::stringstream &msg) const {
+void ExecutionState::printStack(std::stringstream &msg) const {
     msg << "Stack: \n";
     unsigned idx = 0;
     for (ExecutionState::stack_ty::const_reverse_iterator it = stack.rbegin(), ie = stack.rend(); it != ie; ++it) {
         const StackFrame &sf = *it;
-        Function *f = sf.kf->function;
+        Function *f = sf.kf->getFunction();
 
         msg << "\t#" << idx++ << " " << std::setw(8) << std::setfill('0') << " in " << f->getName().str() << " (";
 
@@ -410,8 +344,6 @@ void ExecutionState::printStack(KInstruction *target, std::stringstream &msg) co
         msg << ")";
 
         msg << "\n";
-
-        target = sf.caller;
     }
 }
 
@@ -518,6 +450,18 @@ ref<ConstantExpr> ExecutionState::toConstant(ref<Expr> e, const std::string &rea
     return value;
 }
 
+uint64_t ExecutionState::toConstant(const ref<Expr> &value, const ObjectStateConstPtr &os, size_t offset) {
+    std::stringstream ss;
+    if (os->isSharedConcrete()) {
+        ss << "write to always concrete memory ";
+    }
+
+    ss << "name:" << os->getName() << " offset=" << offset;
+    auto s = ss.str();
+    auto ce = toConstant(value, s.c_str());
+    return ce->getZExtValue();
+}
+
 // This API does not add a constraint
 ref<ConstantExpr> ExecutionState::toConstantSilent(ref<Expr> e) {
     ref<Expr> evalResult = concolics->evaluate(e);
@@ -540,7 +484,8 @@ ref<Expr> ExecutionState::toUnique(ref<Expr> &e) {
     value = dyn_cast<ConstantExpr>(evalResult);
 
     bool isTrue = false;
-    bool success = solver()->mustBeTrue(*this, simplifyExpr(EqExpr::create(e, value)), isTrue);
+    Query q(constraints(), simplifyExpr(EqExpr::create(e, value)));
+    bool success = solver()->mustBeTrue(q, isTrue);
 
     if (success && isTrue) {
         result = value;
@@ -550,19 +495,16 @@ ref<Expr> ExecutionState::toUnique(ref<Expr> &e) {
 }
 
 bool ExecutionState::solve(const ConstraintManager &mgr, Assignment &assignment) {
-    ArrayVec symbObjects;
-    for (unsigned i = 0; i < symbolics.size(); ++i) {
-        symbObjects.push_back(symbolics[i]);
-    }
-
     std::vector<std::vector<unsigned char>> concreteObjects;
-    if (!solver()->getInitialValues(mgr, symbObjects, concreteObjects, queryCost)) {
+    Query q(mgr, ConstantExpr::alloc(0, Expr::Bool));
+
+    if (!solver()->getInitialValues(q, symbolics, concreteObjects)) {
         return false;
     }
 
     assignment.clear();
-    for (unsigned i = 0; i < symbObjects.size(); ++i) {
-        assignment.add(symbObjects[i], concreteObjects[i]);
+    for (unsigned i = 0; i < symbolics.size(); ++i) {
+        assignment.add(symbolics[i], concreteObjects[i]);
     }
 
     return true;
@@ -623,8 +565,8 @@ void ExecutionState::dumpQuery(llvm::raw_ostream &os) const {
     os.flush();
 }
 
-std::shared_ptr<TimingSolver> ExecutionState::solver() const {
-    return SolverManager::solver(*this);
+SolverPtr ExecutionState::solver() const {
+    return m_solver;
 }
 
 Cell &ExecutionState::getArgumentCell(KFunction *kf, unsigned index) {
@@ -646,13 +588,26 @@ void ExecutionState::bindArgument(KFunction *kf, unsigned index, ref<Expr> value
 
 void ExecutionState::stepInstruction() {
     if (DebugPrintInstructions) {
-        llvm::errs() << stats::instructions << " ";
+        llvm::errs() << *stats::instructions << " ";
         llvm::errs() << *(pc->inst) << "\n";
     }
 
-    ++stats::instructions;
+    ++*stats::instructions;
     prevPC = pc;
     ++pc;
+}
+
+ObjectStatePtr ExecutionState::addExternalObject(void *addr, unsigned size, bool isReadOnly, bool isSharedConcrete) {
+    auto ret = ObjectState::allocate((uint64_t) addr, size, true);
+    bindObject(ret, false);
+    ret->setSharedConcrete(isSharedConcrete);
+    if (!isSharedConcrete) {
+        memcpy(ret->getConcreteBuffer(), addr, size);
+    }
+
+    ret->setReadOnly(isReadOnly);
+
+    return ret;
 }
 
 void ExecutionState::bindObject(const ObjectStatePtr &os, bool isLocal) {
@@ -666,4 +621,53 @@ void ExecutionState::bindObject(const ObjectStatePtr &os, bool isLocal) {
         stack.back().allocas.push_back(os->getKey());
     }
 }
+
+void ExecutionState::executeAlloc(ref<Expr> size, bool isLocal, KInstruction *target, bool zeroMemory,
+                                  const ObjectStatePtr &reallocFrom) {
+    size = toUnique(size);
+    if (ConstantExpr *CE = dyn_cast<ConstantExpr>(size)) {
+        auto mo = ObjectState::allocate(0, CE->getZExtValue(), false);
+        if (!mo) {
+            bindLocal(target, ConstantExpr::alloc(0, Context::get().getPointerWidth()));
+        } else {
+            bindObject(mo, isLocal);
+            bindLocal(target, mo->getBaseExpr());
+
+            if (reallocFrom) {
+                unsigned count = std::min(reallocFrom->getSize(), mo->getSize());
+                for (unsigned i = 0; i < count; i++) {
+                    mo->write(i, reallocFrom->read8(i));
+                }
+                addressSpace.unbindObject(reallocFrom->getKey());
+            }
+        }
+    } else {
+        pabort("S2E should not cause allocs with symbolic size");
+        abort();
+    }
+}
+
+void ExecutionState::transferToBasicBlock(BasicBlock *dst, BasicBlock *src) {
+    // Note that in general phi nodes can reuse phi values from the same
+    // block but the incoming value is the eval() result *before* the
+    // execution of any phi nodes. this is pathological and doesn't
+    // really seem to occur, but just in case we run the PhiCleanerPass
+    // which makes sure this cannot happen and so it is safe to just
+    // eval things in order. The PhiCleanerPass also makes sure that all
+    // incoming blocks have the same order for each PHINode so we only
+    // have to compute the index once.
+    //
+    // With that done we simply set an index in the state so that PHI
+    // instructions know which argument to eval, set the pc, and continue.
+
+    // XXX this lookup has to go ?
+    KFunction *kf = stack.back().kf;
+    unsigned entry = kf->getBbEntry(dst);
+    pc = kf->getInstructionPtr(entry);
+    if (pc->inst->getOpcode() == Instruction::PHI) {
+        PHINode *first = static_cast<PHINode *>(pc->inst);
+        incomingBBIndex = first->getBasicBlockIndex(src);
+    }
+}
+
 } // namespace klee

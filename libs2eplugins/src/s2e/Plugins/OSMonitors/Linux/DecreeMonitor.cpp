@@ -43,7 +43,7 @@ using namespace klee;
 namespace s2e {
 namespace plugins {
 
-S2E_DEFINE_PLUGIN(DecreeMonitor, "DecreeMonitor S2E plugin", "OSMonitor", "BaseInstructions", "Vmi");
+S2E_DEFINE_PLUGIN(DecreeMonitor, "DecreeMonitor S2E plugin", "", "BaseInstructions", "LinuxMonitor", "Vmi");
 
 namespace decree {
 
@@ -87,12 +87,11 @@ void DecreeMonitor::initialize() {
         exit(-1);
     }
 
-    // XXX: fix me. Very basic plugins like monitors probably
-    // shouldn't call other plugins.
     m_seedSearcher = s2e()->getPlugin<seeds::SeedSearcher>();
 
-    // XXX: fix this circular dependency.
     m_detector = s2e()->getPlugin<ProcessExecutionDetector>();
+
+    m_monitor = s2e()->getPlugin<LinuxMonitor>();
 
     ConfigFile *cfg = s2e()->getConfig();
 
@@ -105,8 +104,6 @@ void DecreeMonitor::initialize() {
 
     m_invokeOriginalSyscalls = cfg->getBool(getConfigKey() + ".invokeOriginalSyscalls", false);
     m_printOpcodeOffsets = cfg->getBool(getConfigKey() + ".printOpcodeOffsets", false);
-    m_terminateOnSegfault = cfg->getBool(getConfigKey() + ".terminateOnSegfault", true);
-    m_terminateProcessGroupOnSegfault = cfg->getBool(getConfigKey() + ".terminateProcessGroupOnSegfault", false);
     m_concolicMode = cfg->getBool(getConfigKey() + ".concolicMode", false);
     m_logWrittenData = cfg->getBool(getConfigKey() + ".logWrittenData", true);
     m_handleSymbolicAllocateSize = cfg->getBool(getConfigKey() + ".handleSymbolicAllocateSize", false);
@@ -120,8 +117,7 @@ void DecreeMonitor::initialize() {
     m_timeToFirstSegfault = -1;
     time(&m_startTime);
 
-    m_commandSize = sizeof(S2E_DECREEMON_COMMAND);
-    m_commandVersion = S2E_DECREEMON_COMMAND_VERSION;
+    m_monitor->onSegFault.connect(sigc::mem_fun(*this, &DecreeMonitor::onSegFault));
 }
 
 class DecreeMonitorState : public PluginState {
@@ -162,22 +158,6 @@ public:
 unsigned DecreeMonitor::getSymbolicReadsCount(S2EExecutionState *state) const {
     DECLARE_PLUGINSTATE_CONST(DecreeMonitorState, state);
     return plgState->m_totalReadBytesCount;
-}
-
-uint64_t DecreeMonitor::getPid(S2EExecutionState *state) {
-    target_ulong pid;
-    target_ulong taskStructPtr = getTaskStructPtr(state);
-    target_ulong pidAddress = taskStructPtr + m_taskStructPidOffset;
-
-    if (!state->mem()->read(pidAddress, &pid, sizeof(pid))) {
-        return -1;
-    } else {
-        return pid;
-    }
-}
-
-uint64_t DecreeMonitor::getTid(S2EExecutionState *state) {
-    return getPid(state);
 }
 
 void DecreeMonitor::getPreFeedData(S2EExecutionState *state, uint64_t pid, uint64_t count, std::vector<uint8_t> &data) {
@@ -280,7 +260,7 @@ void DecreeMonitor::handleReadData(S2EExecutionState *state, uint64_t pid, const
     ref<Expr> countExpr;
     if (m_handleSymbolicBufferSize && !isSeedState) {
         countExpr = state->mem()->read(d.size_expr_addr, state->getPointerWidth());
-        s2e_assert(state, !countExpr.isNull(), "Failed to read memory");
+        s2e_assert(state, countExpr, "Failed to read memory");
     } else {
         countExpr = E_CONST(d.buffer_size, Expr::Int32);
     }
@@ -336,7 +316,7 @@ void DecreeMonitor::handleWriteData(S2EExecutionState *state, uint64_t pid, cons
     s2e_assert(state, ok, "Failed to read memory");
 
     ref<Expr> countExpr = state->mem()->read(d.size_expr_addr, state->getPointerWidth());
-    s2e_assert(state, !countExpr.isNull(), "Failed to read memory");
+    s2e_assert(state, countExpr, "Failed to read memory");
     countExpr = E_MIN(countExpr, E_CONST(actualCount, state->getPointerWidth()));
 
     std::stringstream ss;
@@ -344,8 +324,7 @@ void DecreeMonitor::handleWriteData(S2EExecutionState *state, uint64_t pid, cons
     std::vector<klee::ref<klee::Expr>> vec;
     for (unsigned i = 0; i < actualCount; ++i) {
         klee::ref<klee::Expr> e = m_memutils->read(state, d.buffer + i);
-        s2e_assert(state, !e.isNull(),
-                   "Failed to read memory byte of pid " << hexval(pid) << " at " << hexval(d.buffer + i));
+        s2e_assert(state, e, "Failed to read memory byte of pid " << hexval(pid) << " at " << hexval(d.buffer + i));
 
         vec.push_back(e);
 
@@ -448,7 +427,7 @@ void DecreeMonitor::handleGetCfgBool(S2EExecutionState *state, uint64_t pid, S2E
         // XXX: this induces  a circular dependency between DecreeMonitor and
         // ProcessExecutionDetector. Better design would be to have a signal
         // to ask other plugins whether this process should be instrumented or not.
-        if (m_detector && !m_detector->isTracked(state, pid)) {
+        if (m_detector && !m_detector->isTrackedPid(state, pid)) {
             value = true;
         } else {
             value = plgState->m_invokeOriginalSyscalls;
@@ -490,7 +469,7 @@ uint64_t DecreeMonitor::getMaxValue(S2EExecutionState *state, ref<Expr> value) {
     std::pair<ref<Expr>, ref<Expr>> range;
     Query query(state->constraints(), value);
 
-    range = state->solver()->solver->getRange(query);
+    range = state->solver()->getRange(query);
 
     return dyn_cast<ConstantExpr>(range.second)->getZExtValue();
 }
@@ -540,7 +519,7 @@ void DecreeMonitor::handleSymbolicSize(S2EExecutionState *state, uint64_t pid, u
 void DecreeMonitor::handleSymbolicAllocateSize(S2EExecutionState *state, uint64_t pid,
                                                const S2E_DECREEMON_COMMAND_HANDLE_SYMBOLIC_SIZE &d) {
     ref<Expr> size = state->mem()->read(d.size_addr, state->getPointerWidth());
-    s2e_assert(state, !size.isNull(), "Failed to read memory");
+    s2e_assert(state, size, "Failed to read memory");
 
     if (isa<ConstantExpr>(size)) {
         return;
@@ -563,10 +542,10 @@ void DecreeMonitor::handleSymbolicAllocateSize(S2EExecutionState *state, uint64_
 void DecreeMonitor::handleSymbolicBuffer(S2EExecutionState *state, uint64_t pid, SymbolicBufferType type,
                                          uint64_t ptrAddr, uint64_t sizeAddr) {
     ref<Expr> ptr = state->mem()->read(ptrAddr, state->getPointerWidth());
-    s2e_assert(state, !ptr.isNull(), "Failed to read memory");
+    s2e_assert(state, ptr, "Failed to read memory");
 
     ref<Expr> size = state->mem()->read(sizeAddr, state->getPointerWidth());
-    s2e_assert(state, !size.isNull(), "Failed to read memory");
+    s2e_assert(state, size, "Failed to read memory");
 
     bool isSymPtr = !isa<ConstantExpr>(ptr);
     bool isSymSize = !isa<ConstantExpr>(size);
@@ -627,57 +606,6 @@ void DecreeMonitor::handleSymbolicRandomBuffer(S2EExecutionState *state, uint64_
     handleSymbolicBuffer(state, pid, SYMBUFF_RANDOM, d.ptr_addr, d.size_addr);
 }
 
-void DecreeMonitor::handleCopyToUser(S2EExecutionState *state, uint64_t pid,
-                                     const S2E_DECREEMON_COMMAND_COPY_TO_USER &d) {
-    if (!d.done) {
-        return;
-    }
-
-    if (d.ret != 0) {
-        getDebugStream(state) << "copy_to_user returned " << d.ret << "\n";
-        return;
-    }
-
-    for (unsigned i = 0; i < d.count; ++i) {
-        ref<Expr> value = state->mem()->read(d.user_addr + i, Expr::Int8);
-        if (value.isNull()) {
-            getDebugStream(state) << "could not read address " << hexval(d.user_addr + i) << "\n";
-            continue;
-        }
-
-        if (isa<ConstantExpr>(value)) {
-            g_s2e->getCorePlugin()->onConcreteDataMemoryAccess.emit(state, d.user_addr + i,
-                                                                    cast<klee::ConstantExpr>(value)->getZExtValue(), 1,
-                                                                    MEM_TRACE_FLAG_WRITE | MEM_TRACE_FLAG_PLUGIN);
-        } else {
-            g_s2e->getCorePlugin()->onAfterSymbolicDataMemoryAccess.emit(
-                state, ConstantExpr::create(d.user_addr + i, Expr::Int64), ConstantExpr::create(-1, Expr::Int64), value,
-                MEM_TRACE_FLAG_WRITE | MEM_TRACE_FLAG_PLUGIN);
-        }
-    }
-}
-
-/// \brief Handle UPDATE_MEMORY_MAP command
-///
-/// Parses command arguments and emits onUpdateMemoryMap event.
-///
-/// \param state current state
-/// \param pid PID of related process
-/// \param d command data
-void DecreeMonitor::handleUpdateMemoryMap(S2EExecutionState *state, uint64_t pid,
-                                          const S2E_DECREEMON_COMMAND_UPDATE_MEMORY_MAP &d) {
-    getDebugStream(state) << "New memory map for pid=" << hexval(pid) << "\n";
-
-    S2E_DECREEMON_VMA buf[d.count];
-    bool ok = state->mem()->read(d.buffer, buf, sizeof(buf));
-    s2e_assert(state, ok, "Failed to read memory");
-
-    for (unsigned i = 0; i < d.count; i++) {
-        getDebugStream(state) << "  " << buf[i] << "\n";
-        onUpdateMemoryMap.emit(state, pid, buf[i]);
-    }
-}
-
 ///
 /// \brief Read and writes CB parameters
 ///
@@ -735,18 +663,6 @@ void DecreeMonitor::handleSetParams(S2EExecutionState *state, uint64_t pid, S2E_
     memcpy(d.cgc_seed, newSeed, d.cgc_seed_len);
 }
 
-void DecreeMonitor::handleInit(S2EExecutionState *state, const S2E_DECREEMON_COMMAND_INIT &d) {
-    getDebugStream(state) << "handleInit: page_offset=" << hexval(d.page_offset)
-                          << " task_struct.pid offset=" << d.task_struct_pid_offset << "\n";
-
-    m_kernelStartAddress = d.page_offset;
-    m_taskStructPidOffset = d.task_struct_pid_offset;
-
-    completeInitialization(state);
-
-    loadKernelImage(state, d.start_kernel);
-}
-
 void DecreeMonitor::printOpcodeOffsets(S2EExecutionState *state) {
     getDebugStream(state) << "S2E_DECREEMON_COMMAND offsets:\n";
 
@@ -758,7 +674,6 @@ void DecreeMonitor::printOpcodeOffsets(S2EExecutionState *state) {
     } while (0)
 
     PRINTOFF(Command);
-    PRINTOFF(currentPid);
 
     PRINTOFF(Data.fd);
     PRINTOFF(Data.buffer);
@@ -782,10 +697,6 @@ void DecreeMonitor::printOpcodeOffsets(S2EExecutionState *state) {
     PRINTOFF(FDWait.invoke_orig);
     PRINTOFF(FDWait.result);
 
-    PRINTOFF(SegFault.pc);
-    PRINTOFF(SegFault.address);
-    PRINTOFF(SegFault.fault);
-
     PRINTOFF(Random.buffer);
     PRINTOFF(Random.buffer_size);
 
@@ -796,98 +707,93 @@ void DecreeMonitor::printOpcodeOffsets(S2EExecutionState *state) {
 
     PRINTOFF(SymbolicBuffer.ptr_addr);
     PRINTOFF(SymbolicBuffer.size_addr);
+}
 
-    PRINTOFF(CopyToUser.user_addr);
-    PRINTOFF(CopyToUser.addr);
-    PRINTOFF(CopyToUser.count);
-    PRINTOFF(CopyToUser.done);
-    PRINTOFF(CopyToUser.ret);
+void DecreeMonitor::onSegFault(S2EExecutionState *state, uint64_t pid, const S2E_LINUXMON_COMMAND_SEG_FAULT &data) {
+    if (m_firstSegfault) {
+        time_t now;
+        time(&now);
+        m_timeToFirstSegfault = difftime(now, m_startTime);
+        m_firstSegfault = false;
+    }
+}
 
-    PRINTOFF(UpdateMemoryMap.count);
-    PRINTOFF(UpdateMemoryMap.buffer);
+void DecreeMonitor::handleOpcodeInvocation(S2EExecutionState *state, uint64_t guestDataPtr, uint64_t guestDataSize) {
+    uint64_t commandSize = sizeof(S2E_DECREEMON_COMMAND);
+    uint64_t commandVersion = S2E_DECREEMON_COMMAND_VERSION;
+    uint8_t cmd[guestDataSize];
+    memset(cmd, 0, guestDataSize);
 
-    PRINTOFF(currentName);
+    // Validate the size of the instruction
+    s2e_assert(state, guestDataSize == commandSize,
+               "Invalid command size " << guestDataSize << " != " << commandSize
+                                       << " from pagedir=" << hexval(state->regs()->getPageDir())
+                                       << " pc=" << hexval(state->regs()->getPc()));
+
+    // Read any symbolic bytes
+    std::ostringstream symbolicBytes;
+    for (unsigned i = 0; i < guestDataSize; ++i) {
+        ref<Expr> t = state->mem()->read(guestDataPtr + i);
+        if (t && !isa<ConstantExpr>(t)) {
+            symbolicBytes << "  " << hexval(i, 2) << "\n";
+        }
+    }
+
+    if (symbolicBytes.str().length()) {
+        getWarningsStream(state) << "Command has symbolic bytes at " << symbolicBytes.str() << "\n";
+    }
+
+    // Read the instruction
+    bool ok = state->mem()->read(guestDataPtr, cmd, guestDataSize);
+    s2e_assert(state, ok, "Failed to read instruction memory");
+
+    // Validate the instruction's version
+
+    // The version field comes always first in all commands
+    uint64_t version = *(uint64_t *) cmd;
+
+    if (version != commandVersion) {
+        std::ostringstream os;
+
+        for (unsigned i = 0; i < guestDataSize; ++i) {
+            os << hexval(cmd[i]) << " ";
+        }
+
+        getWarningsStream(state) << "Command bytes: " << os.str() << "\n";
+
+        s2e_assert(state, false,
+                   "Invalid command version " << hexval(version) << " != " << hexval(commandVersion)
+                                              << " from pagedir=" << hexval(state->regs()->getPageDir())
+                                              << " pc=" << hexval(state->regs()->getPc()));
+    }
+
+    handleCommand(state, guestDataPtr, guestDataSize, cmd);
 }
 
 void DecreeMonitor::handleCommand(S2EExecutionState *state, uint64_t guestDataPtr, uint64_t guestDataSize, void *cmd) {
     S2E_DECREEMON_COMMAND &command = *(S2E_DECREEMON_COMMAND *) cmd;
-    std::string currentName(command.currentName, strnlen(command.currentName, sizeof(command.currentName)));
 
-    bool processSyscall = true;
-    if (m_detector && !m_detector->isTracked(state, command.currentPid)) {
-        processSyscall = false;
-        getDebugStream(state) << "Pid " << hexval(command.currentPid) << " is not tracked. "
-                              << "Skipping syscall processing.\n";
-    }
+    auto pid = m_monitor->getPid(state);
 
     switch (command.Command) {
-        case DECREE_SEGFAULT: {
-            if (m_firstSegfault) {
-                time_t now;
-                time(&now);
-                m_timeToFirstSegfault = difftime(now, m_startTime);
-                m_firstSegfault = false;
-            }
-
-            getWarningsStream(state) << "received segfault"
-                                     << " type=" << command.SegFault.fault
-                                     << " pagedir=" << hexval(state->regs()->getPageDir())
-                                     << " pid=" << hexval(command.currentPid) << " pc=" << hexval(command.SegFault.pc)
-                                     << " addr=" << hexval(command.SegFault.address) << " name=" << currentName << "\n";
-
-            // Dont switch state until it finishes and gets killed by bootstrap
-            // Need to print a message here to avoid confusion and needless debugging,
-            // wondering why the searcher doesn't work anymore.
-            getDebugStream(state) << "Blocking searcher until state is terminated\n";
-            state->setStateSwitchForbidden(true);
-
-            state->disassemble(getDebugStream(state), command.SegFault.pc, 256);
-
-            onSegFault.emit(state, command.currentPid, command.SegFault.pc);
-
-            if (m_terminateProcessGroupOnSegfault) {
-                getWarningsStream(state) << "Terminating process group: received segfault\n";
-                killpg(0, SIGTERM);
-            }
-
-            if (m_terminateOnSegfault) {
-                getDebugStream(state) << "Terminating state: received segfault\n";
-                s2e()->getExecutor()->terminateState(*state, "Segfault");
-            }
-        } break;
-
-        case DECREE_PROCESS_LOAD: {
-            handleProcessLoad(state, command.currentPid, command.ProcessLoad);
-        } break;
-
         case DECREE_READ_DATA: {
-            if (processSyscall) {
-                handleReadData(state, command.currentPid, command.Data);
-            }
+            handleReadData(state, pid, command.Data);
         } break;
 
         case DECREE_READ_DATA_POST: {
-            if (processSyscall) {
-                handleReadDataPost(state, command.currentPid, command.DataPost);
-            }
+            handleReadDataPost(state, pid, command.DataPost);
         } break;
 
         case DECREE_WRITE_DATA: {
-            if (processSyscall) {
-                handleWriteData(state, command.currentPid, command.WriteData);
-            }
+            handleWriteData(state, pid, command.WriteData);
         } break;
 
         case DECREE_FD_WAIT: {
-            if (processSyscall) {
-                handleFdWait(state, command, guestDataPtr);
-            }
+            handleFdWait(state, command, guestDataPtr);
         } break;
 
         case DECREE_RANDOM: {
-            if (processSyscall) {
-                handleRandom(state, command.currentPid, command.Random);
-            }
+            handleRandom(state, pid, command.Random);
         } break;
 
         case DECREE_CONCOLIC_ON: {
@@ -905,49 +811,29 @@ void DecreeMonitor::handleCommand(S2EExecutionState *state, uint64_t guestDataPt
         } break;
 
         case DECREE_GET_CFG_BOOL: {
-            handleGetCfgBool(state, command.currentPid, command.GetCfgBool);
+            handleGetCfgBool(state, pid, command.GetCfgBool);
             bool ok = state->mem()->write(guestDataPtr, &command, sizeof(command));
             s2e_assert(state, ok, "Failed to write memory");
         } break;
 
         case DECREE_HANDLE_SYMBOLIC_ALLOCATE_SIZE: {
-            if (processSyscall) {
-                handleSymbolicAllocateSize(state, command.currentPid, command.SymbolicSize);
-            }
+            handleSymbolicAllocateSize(state, pid, command.SymbolicSize);
         } break;
 
         case DECREE_HANDLE_SYMBOLIC_TRANSMIT_BUFFER: {
-            if (processSyscall) {
-                handleSymbolicTransmitBuffer(state, command.currentPid, command.SymbolicBuffer);
-            }
+            handleSymbolicTransmitBuffer(state, pid, command.SymbolicBuffer);
         } break;
 
         case DECREE_HANDLE_SYMBOLIC_RECEIVE_BUFFER: {
-            if (processSyscall) {
-                handleSymbolicReceiveBuffer(state, command.currentPid, command.SymbolicBuffer);
-            }
+            handleSymbolicReceiveBuffer(state, pid, command.SymbolicBuffer);
         } break;
 
         case DECREE_HANDLE_SYMBOLIC_RANDOM_BUFFER: {
-            if (processSyscall) {
-                handleSymbolicRandomBuffer(state, command.currentPid, command.SymbolicBuffer);
-            }
-        } break;
-
-        case DECREE_COPY_TO_USER: {
-            if (processSyscall) {
-                handleCopyToUser(state, command.currentPid, command.CopyToUser);
-            }
-        } break;
-
-        case DECREE_UPDATE_MEMORY_MAP: {
-            if (processSyscall) {
-                handleUpdateMemoryMap(state, command.currentPid, command.UpdateMemoryMap);
-            }
+            handleSymbolicRandomBuffer(state, pid, command.SymbolicBuffer);
         } break;
 
         case DECREE_SET_CB_PARAMS: {
-            handleSetParams(state, command.currentPid, command.CbParams);
+            handleSetParams(state, pid, command.CbParams);
             if (!state->mem()->write(guestDataPtr, &command, guestDataSize)) {
                 // Do not kill the state in case of an error here. This would prevent
                 // any exploration at all.
@@ -957,19 +843,6 @@ void DecreeMonitor::handleCommand(S2EExecutionState *state, uint64_t guestDataPt
                 s2e_warn_assert(state, false, "Could not write new seed params");
             }
         } break;
-
-        case DECREE_INIT: {
-            handleInit(state, command.Init);
-        } break;
-
-        case DECREE_KERNEL_PANIC: {
-            handleKernelPanic(state, command.Panic.message, command.Panic.message_size);
-        } break;
-
-        case DECREE_MODULE_LOAD: {
-            handleModuleLoad(state, command.currentPid, command.ModuleLoad);
-            break;
-        }
     }
 }
 

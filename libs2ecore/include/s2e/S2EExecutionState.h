@@ -85,7 +85,7 @@ protected:
     PluginStateMap m_PluginState;
 
     /* Internal variable - set to PC where execution should be
-       switched to symbolic (e.g., due to access to symbolic memory */
+       switched to symbolic (e.g., due to access to symbolic memory). */
     uint64_t m_startSymbexAtPC;
 
     /** Set to true when the state is active (i.e., currently selected).
@@ -142,8 +142,6 @@ protected:
 
     unsigned m_nextSymbVarId;
 
-    S2EStateStats m_stats;
-
     S2EExecutionStateTlb m_tlb;
 
     /* Temp location to store a symbolic mem_io_vaddr */
@@ -152,7 +150,6 @@ protected:
     /** Set when execution enters doInterrupt, reset when it exits. */
     bool m_runningExceptionEmulationCode;
 
-    ExecutionState *clone();
     virtual void addressSpaceChange(const klee::ObjectKey &key, const klee::ObjectStateConstPtr &oldState,
                                     const klee::ObjectStatePtr &newState);
 
@@ -170,6 +167,8 @@ public:
 public:
     S2EExecutionState(klee::KFunction *kf);
     ~S2EExecutionState();
+
+    virtual ExecutionState *clone();
 
     int getID() const {
         return m_stateID;
@@ -208,6 +207,14 @@ public:
             return ret;
         }
         return (*it).second;
+    }
+
+    template <typename T> T *getPluginState(Plugin *plugin) const {
+        auto it = m_PluginState.find(plugin);
+        if (it == m_PluginState.end()) {
+            return nullptr;
+        }
+        return dynamic_cast<T *>((*it).second);
     }
 
     /** Returns true if this is the active state */
@@ -267,13 +274,6 @@ public:
     void writeMemIoVaddr(klee::ref<klee::Expr> value) {
         m_memIoVaddr = value;
     }
-
-    /** Handler for tcg_llvm_make_symbolic, tcg_llvm_get_value. */
-    void makeSymbolic(std::vector<klee::ref<klee::Expr>> &args);
-    void kleeReadMemory(klee::ref<klee::Expr> kleeAddressExpr, uint64_t sizeInBytes,
-                        std::vector<klee::ref<klee::Expr>> *result, bool concreteOnly = false, bool concretize = false,
-                        bool addConstraint = false);
-    void kleeWriteMemory(klee::ref<klee::Expr> kleeAddressExpr, std::vector<klee::ref<klee::Expr>> &bytes);
 
     bool getReturnAddress(uint64_t *retAddr);
     bool bypassFunction(unsigned paramCount);
@@ -402,7 +402,8 @@ public:
         return getPointerSize() * CHAR_BIT;
     }
 
-    void disassemble(llvm::raw_ostream &os, uint64_t pc, unsigned size);
+    bool disassemble(llvm::raw_ostream &os, uint64_t pc, unsigned size);
+    bool disassemble(llvm::raw_ostream &os, uint64_t pc, unsigned size, unsigned pointerSize);
 
     bool getStaticBranchTargets(uint64_t *truePc, uint64_t *falsePc);
     bool getStaticTarget(uint64_t *target);

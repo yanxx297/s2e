@@ -27,7 +27,6 @@
 #include <s2e/cpu.h>
 
 #include <iostream>
-#include <llvm/Config/config.h>
 #include <llvm/Support/FileSystem.h>
 
 #include "Vmi.h"
@@ -92,8 +91,26 @@ std::string Vmi::stripWindowsModulePath(const std::string &path) {
 }
 
 bool Vmi::findModule(const std::string &module, std::string &path) {
-    if (module.empty()) {
+    std::vector<std::string> paths;
+    findModule(module, paths);
+    if (paths.empty()) {
         return false;
+    }
+
+    if (paths.size() > 1) {
+        getWarningsStream() << module << " has more than one host binary\n";
+        for (auto &bin : paths) {
+            getWarningsStream() << "  -> " << bin << "\n";
+        }
+    }
+
+    path = paths[0];
+    return true;
+}
+
+void Vmi::findModule(const std::string &module, std::vector<std::string> &paths) {
+    if (module.empty()) {
+        return;
     }
 
     /* Find the path prefix for the given relative file */
@@ -102,8 +119,8 @@ bool Vmi::findModule(const std::string &module, std::string &path) {
         llvm::sys::path::append(tempPath, module);
 
         if (llvm::sys::fs::exists(tempPath)) {
-            path = tempPath.c_str();
-            return true;
+            paths.push_back(std::string(tempPath.str()));
+            continue;
         }
 
         char buffer[1024];
@@ -122,12 +139,10 @@ bool Vmi::findModule(const std::string &module, std::string &path) {
         llvm::sys::path::append(tempPath, *it);
         llvm::sys::path::append(tempPath, sl);
         if (llvm::sys::fs::exists(tempPath)) {
-            path = tempPath.c_str();
-            return true;
+            paths.push_back(std::string(tempPath.str()));
+            continue;
         }
     }
-
-    return false;
 }
 
 bool Vmi::getHostPathForModule(const std::string &modulePath, const std::string &moduleName, bool caseInsensitive,

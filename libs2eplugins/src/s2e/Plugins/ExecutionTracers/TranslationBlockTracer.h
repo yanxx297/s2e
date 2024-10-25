@@ -28,10 +28,9 @@
 #include <s2e/Plugin.h>
 #include <s2e/S2EExecutionState.h>
 
+#include <s2e/Plugins/OSMonitors/Support/ITracker.h>
 #include <s2e/Plugins/OSMonitors/Support/ModuleMap.h>
-#include <s2e/Plugins/OSMonitors/Support/ProcessExecutionDetector.h>
 #include "ExecutionTracer.h"
-#include "ModuleTracing.h"
 
 namespace s2e {
 namespace plugins {
@@ -50,13 +49,11 @@ public:
     bool setProperty(S2EExecutionState *state, const std::string &name, const std::string &value);
 
 private:
-    ExecutionTracer *m_tracer;
-    ProcessExecutionDetector *m_detector;
+    ExecutionTracer *m_tracer = nullptr;
+    ITracker *m_tracker = nullptr;
 
     bool m_traceTbStart;
     bool m_traceTbEnd;
-
-    ModuleTracing m_modules;
 
     bool isModuleTraced(S2EExecutionState *state, uint64_t pc);
 
@@ -75,7 +72,9 @@ public:
     void disableTracing(S2EExecutionState *state, TranslationBlockTracer::TraceType type);
     bool tracingEnabled(S2EExecutionState *state, TranslationBlockTracer::TraceType type);
 
-    void trace(S2EExecutionState *state, uint64_t pc, uint32_t type /* s2e_trace::PbTraceItemHeaderType */);
+    void trace(S2EExecutionState *state, TranslationBlock *tb, uint32_t type /* s2e_trace::PbTraceItemHeaderType */);
+    static void trace(S2EExecutionState *state, ExecutionTracer *tracer, TranslationBlock *tb,
+                      uint32_t type /* s2e_trace::PbTraceItemHeaderType */);
 };
 
 } // namespace plugins

@@ -34,7 +34,6 @@
 #include <s2e/S2EExecutor.h>
 #include <s2e/Utils.h>
 
-#include <llvm/Config/config.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/Path.h>
@@ -48,8 +47,6 @@
 #include <llvm/IR/Module.h>
 
 #include <klee/Common.h>
-#include <klee/Interpreter.h>
-#include <klee/SolverManager.h>
 
 #include <assert.h>
 #include <deque>
@@ -135,9 +132,6 @@ bool S2E::initialize(int argc, char **argv, TCGLLVMTranslator *translator, const
     /* Initialize KLEE command line options */
     initKleeOptions();
 
-    mSolverFactory = std::shared_ptr<klee::SolverFactory>(new klee::DefaultSolverFactory(this));
-    klee::SolverManager::get().initialize(mSolverFactory);
-
     /* Initialize S2EExecutor */
     initExecutor();
 
@@ -213,7 +207,7 @@ void S2E::writeBitCodeToFile() {
     std::string fileName = getOutputFilename("module.bc");
 
     std::error_code error;
-    llvm::raw_fd_ostream o(fileName, error, llvm::sys::fs::F_None);
+    llvm::raw_fd_ostream o(fileName, error, llvm::sys::fs::OF_None);
 
     llvm::Module *module = m_TCGLLVMTranslator->getModule();
 
@@ -269,13 +263,13 @@ std::string S2E::getOutputFilename(const std::string &fileName) {
     llvm::SmallString<128> filePath(m_outputDirectory);
     llvm::sys::path::append(filePath, fileName);
 
-    return filePath.str();
+    return std::string(filePath.str());
 }
 
 llvm::raw_ostream *S2E::openOutputFile(const std::string &fileName) {
     std::string path = getOutputFilename(fileName);
     std::error_code error;
-    llvm::raw_fd_ostream *f = new llvm::raw_fd_ostream(path, error, llvm::sys::fs::F_None);
+    llvm::raw_fd_ostream *f = new llvm::raw_fd_ostream(path, error, llvm::sys::fs::OF_None);
 
     if (!f || error) {
         llvm::errs() << "Error opening " << path << ": " << error.message() << "\n";
@@ -481,7 +475,7 @@ void S2E::initPlugins() {
 }
 
 void S2E::initExecutor() {
-    m_s2eExecutor = new S2EExecutor(this, m_TCGLLVMTranslator, this);
+    m_s2eExecutor = new S2EExecutor(this, m_TCGLLVMTranslator);
 }
 
 llvm::raw_ostream &S2E::getStream(llvm::raw_ostream &stream, const S2EExecutionState *state) const {
@@ -574,12 +568,6 @@ int S2E::fork() {
 
         getWarningsStream() << "Started new node id=" << newProcessId << " index=" << m_currentInstanceIndex
                             << " pid=" << getpid() << " parent_id=" << oldInstanceId << "\n";
-
-        // Also recreate new statistics files
-        m_s2eExecutor->initializeStatistics();
-
-        // And the solver output
-        klee::SolverManager::get().initialize(mSolverFactory);
 
         s2e_kvm_clone_process();
     }

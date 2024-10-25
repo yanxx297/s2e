@@ -64,26 +64,6 @@ void *tcg_llvm_gen_code(void *llvmTranslator, struct TCGContext *s, struct Trans
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Scalar/GVN.h>
 
-#ifdef STATIC_TRANSLATOR
-#include <llvm/ADT/SmallVector.h>
-
-struct TCGLLVMTBInfo {
-    /* Return instructions */
-    llvm::SmallVector<llvm::ReturnInst *, 2> returnInstructions;
-
-    /* Instructions that assign a value to the program counter */
-    llvm::SmallVector<llvm::StoreInst *, 4> pcAssignments;
-
-    llvm::SmallVector<uint64_t, 2> staticBranchTargets;
-
-    void clear() {
-        returnInstructions.clear();
-        pcAssignments.clear();
-        staticBranchTargets.clear();
-    }
-};
-#endif
-
 class TCGLLVMTranslator {
 private:
     const std::string m_bitcodeLibraryPath;
@@ -91,18 +71,11 @@ private:
 
     llvm::IRBuilder<> m_builder;
 
-    /* Function pass manager (used for optimizing the code) */
-    llvm::legacy::FunctionPassManager *m_functionPassManager;
-
 #ifdef CONFIG_SYMBEX
     /* Declaration of a wrapper function for helpers */
     llvm::Function *m_helperForkAndConcretize;
     llvm::Function *m_qemu_ld_helpers[5];
     llvm::Function *m_qemu_st_helpers[5];
-#endif
-
-#ifdef STATIC_TRANSLATOR
-    TCGLLVMTBInfo m_info;
 #endif
 
     /* Count of generated translation blocks */
@@ -173,10 +146,6 @@ public:
         return m_bitcodeLibraryPath;
     }
 
-    llvm::legacy::FunctionPassManager *getFunctionPassManager() const {
-        return m_functionPassManager;
-    }
-
     bool isInstrumented(llvm::Function *tb);
 
     /* Shortcuts */
@@ -203,27 +172,11 @@ public:
     void generateQemuCpuLoad(const TCGArg *args, unsigned memBits, unsigned regBits, bool signExtend);
     void generateQemuCpuStore(const TCGArg *args, unsigned memBits, llvm::Value *valueToStore);
 
-#ifdef STATIC_TRANSLATOR
-    uint64_t m_currentPc;
-    void attachPcMetadata(llvm::Instruction *instr, uint64_t pc);
-#endif
     llvm::Value *attachCurrentPc(llvm::Value *value);
 
     // This handles the special case of symbolic values
     // assigned to the program counter register
     llvm::Value *handleSymbolicPcAssignment(llvm::Value *orig);
-
-#ifdef STATIC_TRANSLATOR
-    bool isPcAssignment(llvm::Value *v) {
-        return v == m_eip;
-    }
-
-    const TCGLLVMTBInfo &getTbInfo() const {
-        return m_info;
-    }
-
-    void computeStaticBranchTargets();
-#endif
 
     void adjustTypeSize(unsigned target, llvm::Value **v1, llvm::Value **v2) {
         adjustTypeSize(target, v1);
@@ -231,10 +184,12 @@ public:
     }
 
     llvm::Type *tcgType(int type) {
+        assert(type == TCG_TYPE_I64 || type == TCG_TYPE_I32);
         return type == TCG_TYPE_I64 ? intType(64) : intType(32);
     }
 
     llvm::Type *tcgPtrType(int type) {
+        assert(type == TCG_TYPE_I64 || type == TCG_TYPE_I32);
         return type == TCG_TYPE_I64 ? intPtrType(64) : intPtrType(32);
     }
 

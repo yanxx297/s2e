@@ -16,7 +16,7 @@ How do I know what S2E is doing?
    execution. If there are no messages in the logs and the CPU usage is 100%, it may be that execution is stuck
    in the constraint solver. Use the `perf top` Linux utility to get a call stack to identify which part of S2E is busy.
 
-3. ``run.stats`` contains many types of statistics. S2E updates this file about every second, when executing symbolic
+3. ``stats.csv`` contains many types of statistics. S2E updates this file about every second, when executing symbolic
    code. See later in this FAQ for a description of its fields.
 
 Execution seems stuck/slow. What to do?
@@ -47,9 +47,6 @@ Third, use S2E to *selectively* relax and/or over-constrain path constraints.
   the most. Usually, functions such as ``printf`` can be stubbed out, and others like ``strlen`` can be modeled
   to decrease drastically the number of forks. `s2e.so <Tutorials/BasicLinuxSymbex/s2e.so.rst>`__ comes with models for
   several such functions. You can also give `state merging <StateMerging.rst>`__ a try.
-
-* Understanding what to select can be made considerably easier if you `attach a debugger <Howtos/Debugging.rst>`__ to
-  the S2E instance.
 
 * If you use a depth-first search and execution hits a polling loop, rapid forking may occur and execution may never
   exit the loop. Moreover, depending on the accumulated constraints, each iteration may be slower and slower. Make sure
@@ -128,10 +125,10 @@ Enable logging for constraint solving queries:
 With this configuration S2E generates two logs: ``s2e-last/queries.pc`` and ``s2e-last/solver-queries.qlog``. Look for
 "Elapsed time" in the logs.
 
-What do the various fields in ``run.stats`` mean?
+What do the various fields in ``stats.csv`` mean?
 =================================================
 
-You can open ``run.stats`` in a spreadsheet as a CSV file. Most of the fields are self-explanatory. Here are the
+You can open ``stats.csv`` in a spreadsheet as a CSV file. Most of the fields are self-explanatory. Here are the
 trickiest ones:
 
 * ``QueryTime`` shows how much time KLEE spent in the solver.
@@ -139,6 +136,4 @@ trickiest ones:
   is enabled by the ``--use-cex-cache`` KLEE option). ``SolverTime`` shows how much time KLEE spent in total while
   solving queries (this includes all the solver optimizations that could be enabled by various solver-related KLEE
   options).
-* ``ResolveTime`` represents time that KLEE spent resolving symbolic memory addresses, however in S2E this is not
-  computed correctly yet.
 * ``ForkTime`` shows how much time KLEE spent on forking states.

@@ -26,8 +26,6 @@
 #include <cpu/se_libcpu.h>
 #endif
 
-#define barrier() asm volatile("" ::: "memory")
-
 // #define DEBUG_EXEC
 // #define TRACE_EXEC
 
@@ -192,7 +190,9 @@ static void cpu_handle_debug_exception(CPUArchState *env) {
     CPUWatchpoint *wp;
 
     if (!env->watchpoint_hit) {
-        QTAILQ_FOREACH (wp, &env->watchpoints, entry) { wp->flags &= ~BP_WATCHPOINT_HIT; }
+        QTAILQ_FOREACH (wp, &env->watchpoints, entry) {
+            wp->flags &= ~BP_WATCHPOINT_HIT;
+        }
     }
     if (debug_excp_handler) {
         debug_excp_handler(env);
@@ -203,20 +203,20 @@ static void cpu_handle_debug_exception(CPUArchState *env) {
 
 /* main execution loop */
 
-volatile sig_atomic_t exit_request;
+// volatile sig_atomic_t exit_request;
 
 #ifdef TRACE_EXEC
-static void dump_regs(CPUState *env, int isStart) {
+static void dump_regs(CPUX86State *env, int isStart) {
 #if defined(CONFIG_SYMBEX)
     target_ulong eax, ebx, ecx, edx, esi, edi, ebp, esp;
-    g_sqi.regs.read_concrete(offsetof(CPUState, regs[R_EAX]), (uint8_t *) &eax, sizeof(eax));
-    g_sqi.regs.read_concrete(offsetof(CPUState, regs[R_EBX]), (uint8_t *) &ebx, sizeof(ebx));
-    g_sqi.regs.read_concrete(offsetof(CPUState, regs[R_ECX]), (uint8_t *) &ecx, sizeof(ecx));
-    g_sqi.regs.read_concrete(offsetof(CPUState, regs[R_EDX]), (uint8_t *) &edx, sizeof(edx));
-    g_sqi.regs.read_concrete(offsetof(CPUState, regs[R_ESI]), (uint8_t *) &esi, sizeof(esi));
-    g_sqi.regs.read_concrete(offsetof(CPUState, regs[R_EDI]), (uint8_t *) &edi, sizeof(edi));
-    g_sqi.regs.read_concrete(offsetof(CPUState, regs[R_EBP]), (uint8_t *) &ebp, sizeof(ebp));
-    g_sqi.regs.read_concrete(offsetof(CPUState, regs[R_ESP]), (uint8_t *) &esp, sizeof(esp));
+    g_sqi.regs.read_concrete(offsetof(CPUX86State, regs[R_EAX]), (uint8_t *) &eax, sizeof(eax));
+    g_sqi.regs.read_concrete(offsetof(CPUX86State, regs[R_EBX]), (uint8_t *) &ebx, sizeof(ebx));
+    g_sqi.regs.read_concrete(offsetof(CPUX86State, regs[R_ECX]), (uint8_t *) &ecx, sizeof(ecx));
+    g_sqi.regs.read_concrete(offsetof(CPUX86State, regs[R_EDX]), (uint8_t *) &edx, sizeof(edx));
+    g_sqi.regs.read_concrete(offsetof(CPUX86State, regs[R_ESI]), (uint8_t *) &esi, sizeof(esi));
+    g_sqi.regs.read_concrete(offsetof(CPUX86State, regs[R_EDI]), (uint8_t *) &edi, sizeof(edi));
+    g_sqi.regs.read_concrete(offsetof(CPUX86State, regs[R_EBP]), (uint8_t *) &ebp, sizeof(ebp));
+    g_sqi.regs.read_concrete(offsetof(CPUX86State, regs[R_ESP]), (uint8_t *) &esp, sizeof(esp));
 
     fprintf(logfile, "%c cs:eip=%lx:%lx eax=%lx ebx=%lx ecx=%lx edx=%lx esi=%lx edi=%lx ebp=%lx ss:esp=%lx:%lx\n",
             isStart ? 's' : 'e', (uint64_t) env->segs[R_CS].selector, (uint64_t) env->eip, (uint64_t) eax,
@@ -289,14 +289,14 @@ static uintptr_t fetch_and_run_tb(TranslationBlock *prev_tb, int tb_exit_code, C
     env->se_current_tb = tb;
     if (likely(*g_sqi.mode.fast_concrete_invocation)) {
         **g_sqi.mode.running_exception_emulation_code = 0;
-        last_tb = tcg_libcpu_tb_exec(env, tc_ptr);
+        last_tb = tcg_qemu_tb_exec(env, tc_ptr);
     } else {
         last_tb = g_sqi.exec.tb_exec(env, tb);
     }
     env->se_current_tb = NULL;
 #else
 
-    last_tb = tcg_libcpu_tb_exec(env, tc_ptr);
+    last_tb = tcg_qemu_tb_exec(env, tc_ptr);
 
 #endif
 
@@ -493,10 +493,6 @@ int cpu_exec(CPUArchState *env) {
     }
 
     cpu_single_env = env;
-
-    if (unlikely(exit_request)) {
-        env->exit_request = 1;
-    }
 
 #ifdef CONFIG_SYMBEX
     if (!g_sqi.exec.is_runnable()) {

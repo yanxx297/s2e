@@ -9,7 +9,8 @@
 #include "QueryLoggingSolver.h"
 #include "klee/Config/config.h"
 #include "klee/Internal/System/Time.h"
-#include "klee/Statistics.h"
+#include "klee/Stats/Statistic.h"
+#include "klee/Stats/StatisticManager.h"
 #ifdef HAVE_ZLIB_H
 #include "klee/Internal/Support/CompressionStream.h"
 #include "klee/Internal/Support/ErrorHandling.h"
@@ -30,7 +31,7 @@ llvm::cl::opt<bool> CreateCompressedQueryLog("compress-query-log", llvm::cl::ini
 #endif
 } // namespace
 
-QueryLoggingSolver::QueryLoggingSolver(Solver *_solver, std::string path, const std::string &commentSign,
+QueryLoggingSolver::QueryLoggingSolver(SolverPtr &_solver, const std::string &path, const std::string &commentSign,
                                        int queryTimeToLog)
     : solver(_solver), os(0), BufferString(""), logBuffer(BufferString), queryCount(0),
       minQueryTimeToLog(queryTimeToLog), startTime(0.0f), lastQueryTime(0.0f), queryCommentSign(commentSign) {
@@ -38,7 +39,7 @@ QueryLoggingSolver::QueryLoggingSolver(Solver *_solver, std::string path, const 
     if (!CreateCompressedQueryLog) {
 #endif
         std::error_code ec;
-        os = new llvm::raw_fd_ostream(path.c_str(), ec, llvm::sys::fs::OpenFlags::F_Text);
+        os = new llvm::raw_fd_ostream(path.c_str(), ec, llvm::sys::fs::OpenFlags::OF_Text);
         if (ec)
             ErrorInfo = ec.message();
 #ifdef HAVE_ZLIB_H
@@ -53,7 +54,6 @@ QueryLoggingSolver::QueryLoggingSolver(Solver *_solver, std::string path, const 
 }
 
 QueryLoggingSolver::~QueryLoggingSolver() {
-    delete solver;
     delete os;
 }
 
@@ -69,7 +69,7 @@ void QueryLoggingSolver::flushBufferConditionally(bool writeToFile) {
 
 void QueryLoggingSolver::startQuery(const Query &query, const char *typeName, const Query *falseQuery,
                                     const ArrayVec &objects) {
-    Statistic *S = theStatisticManager->getStatisticByName("Instructions");
+    auto S = klee::stats::getStatisticManager()->getStatisticByName("Instructions");
     uint64_t instructions = S ? S->getValue() : 0;
 
     logBuffer << queryCommentSign << " Query " << queryCount++ << " -- "
@@ -124,7 +124,7 @@ bool QueryLoggingSolver::computeTruth(const Query &query, bool &isValid) {
     return success;
 }
 
-bool QueryLoggingSolver::computeValidity(const Query &query, Solver::Validity &result) {
+bool QueryLoggingSolver::computeValidity(const Query &query, Validity &result) {
     startQuery(query, "Validity");
 
     bool success = solver->impl->computeValidity(query, result);

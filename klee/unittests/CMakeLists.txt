@@ -7,25 +7,8 @@
 #
 #===------------------------------------------------------------------------===#
 
-if (NOT EXISTS "${GTEST_ROOT}")
-  message(FATAL_ERROR "GTest build directory \"${GTEST_ROOT}\" cannot be found.\n"
-    "Alternatively you can disable unit tests by passing "
-    "-DENABLE_UNIT_TESTS=OFF to cmake.")
-endif()
-
-if (NOT EXISTS "${GTEST_SRC}")
-  message(FATAL_ERROR "GTest source directory \"${GTEST_SRC}\" cannot be found.\n"
-    "Alternatively you can disable unit tests by passing "
-    "-DENABLE_UNIT_TESTS=OFF to cmake.")
-endif()
-
-set(GTEST_INCLUDE_DIR "${GTEST_SRC}/googletest/include")
-if (NOT IS_DIRECTORY "${GTEST_INCLUDE_DIR}")
-  message(FATAL_ERROR
-    "Cannot find GTest include directory \"${GTEST_INCLUDE_DIR}\"")
-endif()
-
-set(GTEST_LIB_DIR "${GTEST_ROOT}/lib")
+enable_testing()
+find_package(GTest REQUIRED)
 
 # This keeps track of all the unit test
 # targets so we can ensure they are built
@@ -38,17 +21,13 @@ define_property(GLOBAL
 
 llvm_map_components_to_libnames(LLVM_LIBS core)
 
-set(LIBS ${LIBS}
-         ${LLVM_LIBS}
-         ${GTEST_LIB_DIR}/libgtest_main.a
-         ${GTEST_LIB_DIR}/libgtest.a
-         ${GTEST_LIB_DIR}/libgmock_main.a
-         ${GTEST_LIB_DIR}/libgmock.a)
+set(LIBS ${LIBS} ${LLVM_LIBS} ${GTEST_LIBRARIES} ${GMOCK_LIBRARIES} gmock)
 
 function(add_klee_unit_test target_name)
-  add_executable(${target_name} ${ARGN})
+  add_executable(${target_name} ${ARGN} ${PROJECT_SOURCE_DIR}/unittests/TestMain.cpp)
   target_link_libraries(${target_name} PRIVATE ${LIBS})
   target_include_directories(${target_name} BEFORE PRIVATE "${GTEST_INCLUDE_DIR}")
+  target_include_directories(${target_name} BEFORE PRIVATE "${GMOCK_INCLUDE_DIR}")
   set_target_properties(${target_name}
     PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/unittests/"
@@ -60,10 +39,12 @@ function(add_klee_unit_test target_name)
   )
 endfunction()
 
+
 # Unit Tests
 add_subdirectory(Expr)
 add_subdirectory(ADT)
 add_subdirectory(Utils)
+add_subdirectory(Core)
 
 # Set up lit configuration
 set (UNIT_TEST_EXE_SUFFIX "Test")

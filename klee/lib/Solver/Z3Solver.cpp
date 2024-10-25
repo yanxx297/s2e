@@ -31,7 +31,7 @@
 #include "klee/Constraints.h"
 #include "klee/Solver.h"
 #include "klee/SolverImpl.h"
-#include "klee/SolverStats.h"
+#include "klee/Stats/SolverStats.h"
 #include "klee/util/Assignment.h"
 #include "klee/util/ExprHashMap.h"
 #include "klee/util/ExprUtil.h"
@@ -74,7 +74,6 @@ namespace klee {
 
 class Z3BaseSolverImpl : public SolverImpl {
 public:
-    Z3BaseSolverImpl();
     virtual ~Z3BaseSolverImpl();
 
     bool computeTruth(const Query &, bool &isValid);
@@ -85,6 +84,8 @@ public:
     void initializeSolver();
 
 protected:
+    Z3BaseSolverImpl();
+
     virtual void createBuilderCache() = 0;
 
     virtual z3::check_result check(const Query &) = 0;
@@ -118,12 +119,15 @@ private:
     void createBuilder();
 };
 
+class Z3StackSolverImpl;
+using Z3StackSolverImplPtr = std::shared_ptr<Z3StackSolverImpl>;
 class Z3StackSolverImpl : public Z3BaseSolverImpl {
 public:
-    Z3StackSolverImpl();
     virtual ~Z3StackSolverImpl();
 
 protected:
+    Z3StackSolverImpl();
+
     typedef std::list<ConditionNodeRef> ConditionNodeList;
 
     virtual void createBuilderCache();
@@ -132,25 +136,39 @@ protected:
     virtual void postCheck(const Query &);
 
     scoped_ptr<ConditionNodeList> last_constraints_;
+
+public:
+    static Z3StackSolverImplPtr create() {
+        return Z3StackSolverImplPtr(new Z3StackSolverImpl());
+    }
 };
 
+class Z3ResetSolverImpl;
+using Z3ResetSolverImplPtr = std::shared_ptr<Z3ResetSolverImpl>;
 class Z3ResetSolverImpl : public Z3BaseSolverImpl {
 public:
-    Z3ResetSolverImpl();
     virtual ~Z3ResetSolverImpl();
 
 protected:
+    Z3ResetSolverImpl();
     virtual void createBuilderCache();
     virtual z3::check_result check(const Query &);
     virtual void postCheck(const Query &);
+
+public:
+    static Z3ResetSolverImplPtr create() {
+        return Z3ResetSolverImplPtr(new Z3ResetSolverImpl());
+    }
 };
 
+class Z3AssumptionSolverImpl;
+using Z3AssumptionSolverImplPtr = std::shared_ptr<Z3AssumptionSolverImpl>;
 class Z3AssumptionSolverImpl : public Z3BaseSolverImpl {
 public:
-    Z3AssumptionSolverImpl();
     virtual ~Z3AssumptionSolverImpl();
 
 protected:
+    Z3AssumptionSolverImpl();
     virtual void createBuilderCache();
     virtual z3::check_result check(const Query &);
     virtual void postCheck(const Query &);
@@ -162,32 +180,37 @@ private:
 
     GuardMap guards_;
     uint64_t guard_counter_;
+
+public:
+    static Z3AssumptionSolverImplPtr create() {
+        return Z3AssumptionSolverImplPtr(new Z3AssumptionSolverImpl());
+    }
 };
 
 // Z3Solver ////////////////////////////////////////////////////////////////////
 
-Z3Solver *Z3Solver::createResetSolver() {
-    Z3BaseSolverImpl *impl = new Z3ResetSolverImpl();
+Z3SolverPtr Z3Solver::createResetSolver() {
+    auto impl = Z3ResetSolverImpl::create();
     impl->initializeSolver();
 
-    return new Z3Solver(impl);
+    return Z3Solver::create(std::dynamic_pointer_cast<SolverImpl>(impl));
 }
 
-Z3Solver *Z3Solver::createStackSolver() {
-    Z3BaseSolverImpl *impl = new Z3StackSolverImpl();
+Z3SolverPtr Z3Solver::createStackSolver() {
+    auto impl = Z3StackSolverImpl::create();
     impl->initializeSolver();
 
-    return new Z3Solver(impl);
+    return Z3Solver::create(impl);
 }
 
-Z3Solver *Z3Solver::createAssumptionSolver() {
-    Z3BaseSolverImpl *impl = new Z3AssumptionSolverImpl();
+Z3SolverPtr Z3Solver::createAssumptionSolver() {
+    auto impl = Z3AssumptionSolverImpl::create();
     impl->initializeSolver();
 
-    return new Z3Solver(impl);
+    return Z3Solver::create(impl);
 }
 
-Z3Solver::Z3Solver(SolverImpl *impl) : Solver(impl) {
+Z3Solver::Z3Solver(SolverImplPtr &impl) : Solver(impl) {
 }
 
 // Z3BaseSolverImpl ////////////////////////////////////////////////////////////
@@ -210,8 +233,8 @@ void Z3BaseSolverImpl::extractModel(const ArrayVec &objects, std::vector<std::ve
             z3::expr value_ast = model.eval(builder_->getInitialRead(array, offset), true);
             unsigned value_num;
 
-            Z3_bool conv_result = Z3_get_numeral_uint(context_, value_ast, &value_num);
-            ::check(conv_result == Z3_TRUE, "Could not convert value");
+            auto conv_result = Z3_get_numeral_uint(context_, value_ast, &value_num);
+            ::check(conv_result, "Could not convert value");
             assert(value_num < (1 << 8 * sizeof(unsigned char)) && "Invalid model value");
 
             data.push_back((unsigned char) value_num);
@@ -239,20 +262,22 @@ bool Z3BaseSolverImpl::computeValue(const Query &query, ref<Expr> &result) {
     bool hasSolution;
 
     findSymbolicObjects(query.expr, objects);
-    if (!computeInitialValues(query.withFalse(), objects, values, hasSolution))
+    if (!computeInitialValues(query.withFalse(), objects, values, hasSolution)) {
         return false;
+    }
+
     assert(hasSolution && "state has invalid constraint set");
 
-    Assignment a(objects, values);
-    result = a.evaluate(query.expr);
+    AssignmentPtr a = Assignment::create(objects, values);
+    result = a->evaluate(query.expr);
 
     return true;
 }
 
 bool Z3BaseSolverImpl::computeInitialValues(const Query &query, const ArrayVec &objects,
                                             std::vector<std::vector<unsigned char>> &values, bool &hasSolution) {
-    ++stats::queries;
-    ++stats::queryCounterexamples;
+    ++*stats::queries;
+    ++*stats::queryCounterexamples;
 
     z3::check_result result = check(query);
 
@@ -263,13 +288,13 @@ bool Z3BaseSolverImpl::computeInitialValues(const Query &query, const ArrayVec &
         case z3::unsat:
             postCheck(query);
             hasSolution = false;
-            ++stats::queriesValid;
+            ++*stats::queriesValid;
             return true;
         case z3::sat:
             extractModel(objects, values);
             postCheck(query);
             hasSolution = true;
-            ++stats::queriesInvalid;
+            ++*stats::queriesInvalid;
             return true;
     }
 }

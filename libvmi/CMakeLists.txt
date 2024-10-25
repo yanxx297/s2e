@@ -43,9 +43,17 @@ message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 
 add_definitions(${LLVM_DEFINITIONS})
 
+find_package(RapidJSON REQUIRED)
+
+set(ENV{PKG_CONFIG_PATH} ${CMAKE_INSTALL_PREFIX}/lib/pkgconfig)
+find_package(PkgConfig REQUIRED)
+set(CMAKE_PREFIX_PATH ${CMAKE_INSTALL_PREFIX})
+pkg_check_modules(LIBDWARF REQUIRED IMPORTED_TARGET libdwarf)
+
 find_path(LIBDWARF_INCLUDE_DIRS
           NAMES libdwarf.h dwarf.h
           HINTS ${CMAKE_INSTALL_PREFIX}/include)
+message(STATUS "Found libdwarf include dir ${LIBDWARF_INCLUDE_DIRS}")
 
 find_library(LIBDWARF_LIB
              libdwarf.a
@@ -56,7 +64,8 @@ find_library(LIBDWARF_LIB
 # configuration.
 include_directories(${LLVM_INCLUDE_DIRS}
                     "include"
-                    ${LIBDWARF_INCLUDE_DIRS})
+                    ${LIBDWARF_INCLUDE_DIRS}
+                    ${RapidJSON_INCLUDE_DIRS})
 
 link_directories(${LIBDWARF_LIB_DIRS})
 
@@ -68,7 +77,7 @@ execute_process(COMMAND ${LLVM_CONFIG} "--cxxflags"
                 RESULT_VARIABLE LLVM_CONFIG_RESULT
                 OUTPUT_VARIABLE LLVM_CXXFLAGS
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${LLVM_CXXFLAGS} -Wall -std=c++14")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${LLVM_CXXFLAGS} -Wall -std=c++17")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror -Wno-gnu-anonymous-struct -Wno-nested-anon-types -Wno-c99-extensions")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-address-of-packed-member")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -g -O2")
@@ -77,9 +86,6 @@ add_subdirectory(src)
 
 add_executable(crashdump src/crashdump.cpp)
 target_link_libraries(crashdump vmi ${LLVM_LIBS})
-
-add_executable(vmidemo src/vmidemo.cpp)
-target_link_libraries(vmidemo vmi ${LIBDWARF_LIB} elf ${LLVM_LIBS})
 
 add_executable(injector src/injector.cpp)
 target_link_libraries(injector vmi elf ${LLVM_LIBS})
@@ -91,9 +97,9 @@ add_executable(reader src/reader.cpp)
 target_link_libraries(reader vmi elf ${LLVM_LIBS})
 
 add_executable(addrs2lines src/addrs2lines.cpp)
-target_link_libraries(addrs2lines vmi ${LIBDWARF_LIB} elf ${LLVM_LIBS})
+target_link_libraries(addrs2lines vmi ${LIBDWARF_LIB} elf ${LLVM_LIBS} zstd)
 
-install(TARGETS crashdump vmidemo injector dump reader addrs2lines
+install(TARGETS crashdump injector dump reader addrs2lines
         RUNTIME DESTINATION bin)
 install(DIRECTORY "include/vmi"
         DESTINATION include)

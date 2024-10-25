@@ -41,7 +41,6 @@
 
 #include <klee/Searcher.h>
 #include <klee/Solver.h>
-#include <klee/SolverManager.h>
 #include <llvm/ADT/DenseSet.h>
 
 #include <llvm/Support/CommandLine.h>
@@ -109,13 +108,17 @@ void BaseInstructions::initialize() {
         }
 
         getWarningsStream() << "Restriction enabled\n";
-        s2e()->getCorePlugin()->onTranslateBlockStart.connect(
-            sigc::mem_fun(*this, &BaseInstructions::onTranslateBlockStart));
+        m_monitor->onMonitorLoad.connect(sigc::mem_fun(*this, &BaseInstructions::onMonitorLoad));
     }
 
     s2e()->getCorePlugin()->onCustomInstruction.connect(sigc::mem_fun(*this, &BaseInstructions::onCustomInstruction));
 
     g_s2e_allow_custom_instructions = 1;
+}
+
+void BaseInstructions::onMonitorLoad(S2EExecutionState *state) {
+    s2e()->getCorePlugin()->onTranslateBlockStart.connect(
+        sigc::mem_fun(*this, &BaseInstructions::onTranslateBlockStart));
 }
 
 void BaseInstructions::onTranslateBlockStart(ExecutionSignal *signal, S2EExecutionState *state, TranslationBlock *tb,
@@ -237,7 +240,7 @@ void BaseInstructions::isSymbolic(S2EExecutionState *state) {
     result = 0;
     for (unsigned i = 0; i < size; ++i) {
         klee::ref<klee::Expr> ret = state->mem()->read(address + i);
-        if (ret.isNull()) {
+        if (!ret) {
             getWarningsStream() << "Could not read address " << hexval(address + i) << "\n";
             continue;
         }
@@ -340,7 +343,7 @@ void BaseInstructions::printMemory(S2EExecutionState *state) {
     for (uint32_t i = 0; i < size; ++i) {
         getInfoStream() << hexval(address + i) << ": ";
         klee::ref<Expr> res = state->mem()->read(address + i);
-        if (res.isNull()) {
+        if (!res) {
             getInfoStream() << "Invalid pointer\n";
         } else {
             getInfoStream() << res << '\n';
@@ -589,7 +592,7 @@ void BaseInstructions::assumeDisjunction(S2EExecutionState *state) {
     target_ulong currentParam = sp + STACK_ELEMENT_SIZE * 2;
 
     klee::ref<klee::Expr> variable = state->mem()->read(currentParam, STACK_ELEMENT_SIZE * 8);
-    if (variable.isNull()) {
+    if (!variable) {
         getWarningsStream(state) << "BaseInstructions: assumeDisjunction could not read the variable\n";
         return;
     }
@@ -649,20 +652,25 @@ void BaseInstructions::writeBuffer(S2EExecutionState *state) {
     ok &= state->regs()->read(CPU_OFFSET(regs[R_EDI]), &destination, sizeof(destination), false);
     ok &= state->regs()->read(CPU_OFFSET(regs[R_ECX]), &size, sizeof(size), false);
 
-    getDebugStream(state) << "BaseInstructions: copying " << size << " bytes from " << hexval(source) << " to "
-                          << hexval(destination) << "\n";
+    if (!ok) {
+        getWarningsStream(state) << "writeBuffer: could not read registers\n";
+        return;
+    }
+
+    getDebugStream(state) << "copying " << size << " bytes from " << hexval(source) << " to " << hexval(destination)
+                          << "\n";
 
     uint32_t remaining = (uint32_t) size;
 
     while (remaining > 0) {
         uint8_t byte;
         if (!state->mem()->read(source, &byte, sizeof(byte))) {
-            getDebugStream(state) << "BaseInstructions: could not read byte at " << hexval(source) << "\n";
+            getDebugStream(state) << "could not read byte at " << hexval(source) << "\n";
             break;
         }
 
         if (!state->mem()->write(destination, &byte, sizeof(byte))) {
-            getDebugStream(state) << "BaseInstructions: could not write byte to " << hexval(destination) << "\n";
+            getDebugStream(state) << "could not write byte to " << hexval(destination) << "\n";
             break;
         }
 
@@ -690,7 +698,7 @@ void BaseInstructions::getRange(S2EExecutionState *state) {
         return;
     }
 
-    Solver *solver = state->solver()->solver;
+    auto solver = state->solver();
 
     Query query(state->constraints(), value);
     range = solver->getRange(query);
@@ -720,41 +728,18 @@ void BaseInstructions::getConstraintsCountForExpression(S2EExecutionState *state
  */
 void BaseInstructions::forkCount(S2EExecutionState *state) {
     target_ulong count;
-    target_ulong nameptr;
 
     state->jumpToSymbolicCpp();
 
     state->regs()->read(CPU_OFFSET(regs[R_EAX]), &count, sizeof count);
-    state->regs()->read(CPU_OFFSET(regs[R_ECX]), &nameptr, sizeof nameptr);
-
-    std::string name;
-
-    if (!state->mem()->readString(nameptr, name)) {
-        getWarningsStream(state) << "Could not read string at address " << hexval(nameptr) << "\n";
-
-        state->regs()->write<target_ulong>(CPU_OFFSET(regs[R_EAX]), -1);
-        return;
-    }
-
-    klee::ref<klee::Expr> var = state->createSymbolicValue<uint32_t>(name, 0);
-
-    state->regs()->write(CPU_OFFSET(regs[R_EAX]), var);
     state->regs()->write<target_ulong>(CPU_OFFSET(eip), state->regs()->getPc() + 10);
 
-    getDebugStream(state) << "s2e_fork: will fork " << count << " times with variable " << var << "\n";
+    getDebugStream(state) << "s2e_fork: will fork " << count << " time(s)\n";
 
-    for (unsigned i = 1; i < count; ++i) {
-        klee::ref<klee::Expr> val = klee::ConstantExpr::create(i, var->getWidth());
-        klee::ref<klee::Expr> cond = klee::NeExpr::create(var, val);
-
-        klee::Executor::StatePair sp = s2e()->getExecutor()->forkCondition(state, cond, true);
+    for (unsigned i = 0; i < count; ++i) {
+        S2EExecutor::StatePair sp = s2e()->getExecutor()->fork(*state);
         assert(sp.first == state);
         assert(sp.second && sp.second != sp.first);
-    }
-
-    klee::ref<klee::Expr> cond = klee::EqExpr::create(var, klee::ConstantExpr::create(0, var->getWidth()));
-    if (!state->addConstraint(cond)) {
-        s2e()->getExecutor()->terminateState(*state, "Could not add condition");
     }
 }
 
@@ -809,6 +794,12 @@ void BaseInstructions::handleBuiltInOps(S2EExecutionState *state, uint64_t opcod
 
         case BASE_S2E_DISABLE_FORK: { /* s2e_disable_forking */
             state->disableForking();
+            break;
+        }
+
+        case BASE_S2E_IS_FORKING_ENABLED: { /* s2e_is_forking_enabled */
+            bool res = state->isForkingEnabled();
+            state->regs()->write(CPU_OFFSET(regs[R_EAX]), &res, sizeof(res));
             break;
         }
 
@@ -949,11 +940,6 @@ void BaseInstructions::handleBuiltInOps(S2EExecutionState *state, uint64_t opcod
         // This may be useful for properly measuring kernel coverage
         case BASE_S2E_FLUSH_TBS: { /* s2e_flush_tbs */
             se_tb_safe_flush();
-        } break;
-
-        case BASE_S2E_SET_LIBCPU_LOG_LEVEL: {
-            loglevel = (int) state->regs()->read<uint64_t>(CPU_OFFSET(regs[R_EAX]));
-            getInfoStream(state) << "Set libcpu loglevel to " << hexval(loglevel) << "\n";
         } break;
 
         default:

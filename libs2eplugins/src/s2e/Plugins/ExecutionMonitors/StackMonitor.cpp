@@ -230,7 +230,9 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const StackMonitorState::St
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const StackMonitorState::Stack &stack) {
     os << "Stack bound=" << hexval(stack.m_stackBound) << "\n";
-    foreach2 (it, stack.m_frames.begin(), stack.m_frames.end()) { os << *it << "\n"; }
+    foreach2 (it, stack.m_frames.begin(), stack.m_frames.end()) {
+        os << *it << "\n";
+    }
 
     return os;
 }
@@ -321,7 +323,7 @@ void StackMonitor::update(S2EExecutionState *state, uint64_t sp, uint64_t pc, bo
 }
 
 void StackMonitor::onThreadExit(S2EExecutionState *state, const ThreadDescriptor &thread) {
-    if (!m_processDetector->isTracked(state, thread.Pid)) {
+    if (!m_processDetector->isTrackedPid(state, thread.Pid)) {
         return;
     }
 
@@ -330,7 +332,7 @@ void StackMonitor::onThreadExit(S2EExecutionState *state, const ThreadDescriptor
 }
 
 void StackMonitor::onProcessUnload(S2EExecutionState *state, uint64_t pageDir, uint64_t pid, uint64_t returnCode) {
-    if (!m_processDetector->isTracked(state, pid)) {
+    if (!m_processDetector->isTrackedPid(state, pid)) {
         return;
     }
 
@@ -508,7 +510,9 @@ bool StackMonitorState::getFrameInfo(S2EExecutionState *state, uint64_t sp, bool
 
 void StackMonitorState::dump(S2EExecutionState *state) const {
     m_stackMonitor->getDebugStream() << "Dumping stacks\n";
-    foreach2 (it, m_stacks.begin(), m_stacks.end()) { m_stackMonitor->getDebugStream() << (*it).second << "\n"; }
+    foreach2 (it, m_stacks.begin(), m_stacks.end()) {
+        m_stackMonitor->getDebugStream() << (*it).second << "\n";
+    }
 }
 
 bool StackMonitorState::getCallStack(S2EExecutionState *state, uint64_t pid, uint64_t tid,

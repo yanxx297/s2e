@@ -58,6 +58,8 @@ void ExecutionTracer::initialize() {
 
     s2e()->getCorePlugin()->onEngineShutdown.connect(sigc::mem_fun(*this, &ExecutionTracer::onEngineShutdown));
 
+    s2e()->getCorePlugin()->onStateKill.connect(sigc::mem_fun(*this, &ExecutionTracer::onStateKill));
+
     m_monitor = static_cast<OSMonitor *>(s2e()->getPlugin("OSMonitor"));
     if (m_monitor) {
         m_monitor->onMonitorLoad.connect(sigc::mem_fun(*this, &ExecutionTracer::onMonitorLoad));
@@ -66,6 +68,10 @@ void ExecutionTracer::initialize() {
 
 ExecutionTracer::~ExecutionTracer() {
     onEngineShutdown();
+}
+
+void ExecutionTracer::onStateKill(S2EExecutionState *state) {
+    flush();
 }
 
 void ExecutionTracer::onEngineShutdown() {
@@ -139,9 +145,18 @@ uint32_t ExecutionTracer::writeData(S2EExecutionState *state, const void *data, 
 
     if (m_monitor && m_monitor->initialized()) {
         header.set_pid(m_monitor->getPid(state));
+        header.set_tid(m_monitor->getTid(state));
     } else {
         header.set_pid(0);
+        header.set_tid(0);
     }
+
+    return writeData(state, header, data, size, type);
+}
+
+uint32_t ExecutionTracer::writeData(S2EExecutionState *state, s2e_trace::PbTraceItemHeader &header, const void *data,
+                                    unsigned size, uint32_t type /* s2e_trace::PbTraceItemHeaderType */) {
+    assert(m_logFile);
 
     // We must take the guid instead of the id, because duplicate ids
     // across multiple traces will confuse the execution trace reader.

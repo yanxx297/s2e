@@ -38,7 +38,7 @@ void MemUtils::initialize() {
 
 ref<Expr> MemUtils::read(S2EExecutionState *state, uint64_t addr, klee::Expr::Width width) {
     ref<Expr> expr = state->mem()->read(addr, width);
-    if (!expr.isNull()) {
+    if (expr) {
         return expr;
     }
 
@@ -69,7 +69,7 @@ klee::ref<klee::Expr> MemUtils::read(S2EExecutionState *state, uint64_t addr) {
 bool MemUtils::read(S2EExecutionState *state, std::vector<ref<Expr>> &output, uint64_t address, unsigned length) {
     for (unsigned i = 0; i < length; ++i) {
         ref<Expr> e = read(state, address + i);
-        if (e.isNull()) {
+        if (!e) {
             getWarningsStream(state) << "Could not read byte at " << hexval(address + i) << "\n";
             return false;
         }
@@ -164,9 +164,13 @@ void MemUtils::findSequencesOfSymbolicData(S2EExecutionState *state, uint64_t pi
 }
 
 void MemUtils::findMemoryPages(S2EExecutionState *state, uint64_t pid, bool mustBeWritable, bool mustBeExecutable,
-                               std::unordered_set<uint64_t> &pages) {
+                               RegionMap<MemoryMapRegionType> &pages) {
     auto lambda = [&](uint64_t start, uint64_t end, MemoryMapRegionType type) {
         bool doAdd = false;
+
+        if (!mustBeWritable && (type & MM_READ)) {
+            doAdd = true;
+        }
 
         if (mustBeWritable && (type & MM_WRITE)) {
             doAdd = true;
@@ -177,9 +181,7 @@ void MemUtils::findMemoryPages(S2EExecutionState *state, uint64_t pid, bool must
         }
 
         if (doAdd) {
-            for (uint64_t s = start; s < end; s += TARGET_PAGE_SIZE) {
-                pages.insert(s & TARGET_PAGE_MASK);
-            }
+            pages.add(start, end, type);
         }
 
         return true;

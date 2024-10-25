@@ -56,15 +56,15 @@ if(WITH_TARGET MATCHES "s2e")
     set(LIBS ${LIBS} memcached
                      lua
                      ${LLVM_LIBS}
-                     z3
-                     ${LIBQ_LIBRARY_DIR}/libq.a
+                     z3.a
+                     gomp
                      ${PROTOBUF_LIBRARIES})
     set(LIBS ${LIBS} boost_serialization
                      boost_system
                      boost_regex)
 endif()
 
-set(LIBS ${LIBS} ${LIBCOROUTINE_LIBRARY_DIR}/libcoroutine.a ${FSIGCXX_LIBRARY_DIR}/libfsigc++.a ${CAPSTONE_LIB_DIR}/libcapstone.a pthread glib-2.0 bsd)
+set(LIBS ${LIBS} ${LIBCOROUTINE_LIBRARY_DIR}/libcoroutine.a ${FSIGCXX_LIBRARY_DIR}/libfsigc++.a ${LIBQ_LIBRARY_DIR}/libq.a ${CAPSTONE_LIBRARIES} pthread glib-2.0 bsd dl)
 
 target_link_libraries(tests2e PUBLIC ${LIBCOROUTINE_LIBRARY_DIR}/libcoroutine.a pthread glib-2.0)
 target_link_libraries(s2e ${LIBS})
@@ -85,4 +85,4 @@ set(COMMON_FLAGS "${COMMON_FLAGS} -Wall -fPIC -fno-strict-aliasing -fexceptions"
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${WERROR_FLAGS} ${COMMON_FLAGS} -std=c++14")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${WERROR_FLAGS} ${COMMON_FLAGS}")
-set(CMAKE_SHARED_LINKER_FLAGS "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/mapfile")
+set(CMAKE_SHARED_LINKER_FLAGS "-Wl,--as-needed -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/mapfile")

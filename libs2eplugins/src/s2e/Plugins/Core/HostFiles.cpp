@@ -36,7 +36,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include <llvm/Config/config.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/Path.h>
 
@@ -50,7 +49,9 @@ void HostFiles::initialize() {
 
     ConfigFile::string_list dirs = s2e()->getConfig()->getStringList(getConfigKey() + ".baseDirs");
 
-    foreach2 (it, dirs.begin(), dirs.end()) { m_baseDirectories.push_back(*it); }
+    foreach2 (it, dirs.begin(), dirs.end()) {
+        m_baseDirectories.push_back(*it);
+    }
 
     foreach2 (it, m_baseDirectories.begin(), m_baseDirectories.end()) {
         if (!llvm::sys::fs::exists((*it))) {

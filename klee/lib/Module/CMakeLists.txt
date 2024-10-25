@@ -7,14 +7,12 @@
 #
 #===------------------------------------------------------------------------===#
 klee_add_component(kleeModule
-	InstructionInfoTable.cpp
 	InstructionOperandTypeCheckPass.cpp
 	IntrinsicCleaner.cpp
 	KInstruction.cpp
 	KModule.cpp
 	LowerSwitch.cpp
 	ModuleUtil.cpp
-	Optimize.cpp
 	PhiCleaner.cpp
 	RaiseAsm.cpp
 )

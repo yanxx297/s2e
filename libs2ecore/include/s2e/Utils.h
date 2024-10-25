@@ -164,7 +164,9 @@ class raw_tee_ostream : public llvm::raw_ostream {
     std::deque<llvm::raw_ostream *> m_parentBufs;
 
     virtual void write_impl(const char *Ptr, size_t size) {
-        foreach2 (it, m_parentBufs.begin(), m_parentBufs.end()) { (*it)->write(Ptr, size); }
+        foreach2 (it, m_parentBufs.begin(), m_parentBufs.end()) {
+            (*it)->write(Ptr, size);
+        }
     }
 
     virtual uint64_t current_pos() const {
@@ -231,6 +233,8 @@ static inline std::string trim(std::string s, const char *t = " \t\n\r\f\v") {
 }
 
 bool ReadLines(const std::string &file, std::vector<std::string> &lines, bool doTrim);
+
+uint64_t GetProcessMemoryUsage();
 
 } // namespace s2e
 

@@ -14,11 +14,12 @@
 #include "klee/Expr.h"
 
 #include "klee/AddressSpace.h"
+#include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/KInstIterator.h"
+#include "klee/Internal/Module/KModule.h"
 
 #include "klee/BitfieldSimplifier.h"
 #include "klee/Solver.h"
-#include "klee/SolverManager.h"
 #include "klee/util/Assignment.h"
 #include "IAddressSpaceNotification.h"
 
@@ -28,21 +29,17 @@
 
 namespace klee {
 class Array;
-class CallPathNode;
 struct Cell;
-struct KFunction;
 struct KInstruction;
-struct InstructionInfo;
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const MemoryMap &mm);
 
 struct StackFrame {
     KInstIterator caller;
     KFunction *kf;
-    CallPathNode *callPathNode;
 
     llvm::SmallVector<ObjectKey, 16> allocas;
-    Cell *locals;
+    llvm::SmallVector<Cell, 16> locals;
 
     // For vararg functions: arguments not passed via parameter are
     // stored (packed tightly) in a local (alloca) memory object. This
@@ -51,9 +48,9 @@ struct StackFrame {
     // of intrinsic lowering.
     std::vector<ObjectKey> varargs;
 
-    StackFrame(KInstIterator caller, KFunction *kf);
-    StackFrame(const StackFrame &s);
-    ~StackFrame();
+    StackFrame(KInstIterator _caller, KFunction *_kf) : caller(_caller), kf(_kf), varargs(0) {
+        locals.resize(kf->getNumRegisters());
+    }
 };
 
 class ExecutionState : public IAddressSpaceNotification {
@@ -69,18 +66,14 @@ public:
 private:
     // unsupported, use copy constructor
     ExecutionState &operator=(const ExecutionState &);
-    std::map<std::string, std::string> fnAliases;
+
+    SolverPtr m_solver;
 
 public:
-    bool fakeState;
-
     // pc - pointer to current instruction stream
     KInstIterator pc, prevPC;
     stack_ty stack;
     AddressSpace addressSpace;
-
-    // XXX: get this out of here
-    mutable double queryCost;
 
     /// Disables forking, set by user code.
     bool forkDisabled;
@@ -88,18 +81,9 @@ public:
     /// ordered list of symbolics: used to generate test cases.
     std::vector<ArrayPtr> symbolics;
 
-    // Maps a KLEE variable name to the real variable name.
-    // The KLEE name is stripped from any special characters to make
-    // it suitable to send to the constraint solver.
-    klee::ImmutableMap<std::string, std::string> variableNameMapping;
-
-    Assignment *concolics;
+    AssignmentPtr concolics;
 
     unsigned incomingBBIndex;
-
-    std::string getFnAlias(std::string fn);
-    void addFnAlias(std::string old_fn, std::string new_fn);
-    void removeFnAlias(std::string fn);
 
 private:
     /// Simplifier user to simplify expressions when adding them
@@ -107,11 +91,10 @@ private:
 
     ConstraintManager m_constraints;
 
-    ExecutionState() : fakeState(false), addressSpace(this) {
+    ExecutionState() : addressSpace(this) {
     }
 
 protected:
-    virtual ExecutionState *clone();
     virtual void addressSpaceChange(const klee::ObjectKey &key, const ObjectStateConstPtr &oldState,
                                     const ObjectStatePtr &newState);
 
@@ -123,7 +106,6 @@ public:
     // Only fired in the context of a memory operation (load/store)
     virtual void addressSpaceSymbolicStatusChange(const ObjectStatePtr &object, bool becameConcrete);
 
-public:
     ExecutionState(KFunction *kf);
 
     // XXX total hack, just used to make a state so solver can
@@ -132,14 +114,10 @@ public:
 
     virtual ~ExecutionState();
 
-    ExecutionState *branch();
+    virtual ExecutionState *clone();
 
     void pushFrame(KInstIterator caller, KFunction *kf);
     void popFrame();
-
-    void addSymbolic(ArrayPtr array) {
-        symbolics.push_back(array);
-    }
 
     const ConstraintManager &constraints() const {
         return m_constraints;
@@ -170,7 +148,7 @@ public:
 
     virtual bool merge(const ExecutionState &b);
 
-    void printStack(KInstruction *target, std::stringstream &msg) const;
+    void printStack(std::stringstream &msg) const;
 
     bool getSymbolicSolution(std::vector<std::pair<std::string, std::vector<unsigned char>>> &res);
 
@@ -181,6 +159,7 @@ public:
     }
 
     ref<ConstantExpr> toConstant(ref<Expr> e, const std::string &reason);
+    uint64_t toConstant(const ref<Expr> &value, const ObjectStateConstPtr &os, size_t offset);
     ref<ConstantExpr> toConstantSilent(ref<Expr> e);
 
     /// Return a unique constant value for the given expression in the
@@ -190,7 +169,7 @@ public:
 
     void dumpQuery(llvm::raw_ostream &os) const;
 
-    std::shared_ptr<TimingSolver> solver() const;
+    SolverPtr solver() const;
 
     Cell &getArgumentCell(KFunction *kf, unsigned index);
     Cell &getDestCell(KInstruction *target);
@@ -199,7 +178,35 @@ public:
     void bindArgument(KFunction *kf, unsigned index, ref<Expr> value);
     void stepInstruction();
 
+    // Given a concrete object in our [klee's] address space, add it to
+    // objects checked code can reference.
+    ObjectStatePtr addExternalObject(void *addr, unsigned size, bool isReadOnly, bool isSharedConcrete = false);
+
     void bindObject(const ObjectStatePtr &os, bool isLocal);
+
+    void setSolver(SolverPtr &solver) {
+        m_solver = solver;
+    }
+
+    /// Allocate and bind a new object in a particular state. NOTE: This
+    /// function may fork.
+    ///
+    /// \param isLocal Flag to indicate if the object should be
+    /// automatically deallocated on function return (this also makes it
+    /// illegal to free directly).
+    ///
+    /// \param target Value at which to bind the base address of the new
+    /// object.
+    ///
+    /// \param reallocFrom If non-zero and the allocation succeeds,
+    /// initialize the new object from the given one and unbind it when
+    /// done (realloc semantics). The initialized bytes will be the
+    /// minimum of the size of the old and new objects, with remaining
+    /// bytes initialized as specified by zeroMemory.
+    void executeAlloc(ref<Expr> size, bool isLocal, KInstruction *target, bool zeroMemory = false,
+                      const ObjectStatePtr &reallocFrom = nullptr);
+
+    void transferToBasicBlock(llvm::BasicBlock *dst, llvm::BasicBlock *src);
 };
 } // namespace klee
 

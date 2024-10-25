@@ -29,17 +29,6 @@
 #include <s2e/s2e_libcpu.h>
 
 extern "C" {
-// XXX: move these declarations to s2e
-uint8_t __ldb_mmu_trace(uint8_t *host_addr, target_ulong vaddr);
-uint16_t __ldw_mmu_trace(uint16_t *host_addr, target_ulong vaddr);
-uint32_t __ldl_mmu_trace(uint32_t *host_addr, target_ulong vaddr);
-uint64_t __ldq_mmu_trace(uint64_t *host_addr, target_ulong vaddr);
-
-void __stb_mmu_trace(uint8_t *host_addr, target_ulong vaddr);
-void __stw_mmu_trace(uint16_t *host_addr, target_ulong vaddr);
-void __stl_mmu_trace(uint32_t *host_addr, target_ulong vaddr);
-void __stq_mmu_trace(uint64_t *host_addr, target_ulong vaddr);
-
 extern se_do_interrupt_all_t g_s2e_do_interrupt_all;
 }
 #endif
@@ -71,7 +60,6 @@ void init_s2e_libcpu_interface(struct se_libcpu_interface_t *sqi) {
     sqi->tb.flush_tb_cache = s2e_flush_tb_cache;
     sqi->tb.set_tb_function = s2e_set_tb_function;
     sqi->tb.is_tb_instrumented = s2e_is_tb_instrumented;
-    sqi->tb.increment_tb_stats = s2e_increment_tb_stats;
 
     sqi->tlb.flush_tlb_cache = s2e_flush_tlb_cache;
     sqi->tlb.flush_tlb_cache_page = se_flush_tlb_cache_page;
@@ -93,15 +81,6 @@ void init_s2e_libcpu_interface(struct se_libcpu_interface_t *sqi) {
     sqi->mem.is_mmio_symbolic = s2e_is_mmio_symbolic;
     sqi->mem.is_vmem_symbolic = se_is_vmem_symbolic;
     sqi->mem.get_host_address = se_get_host_address;
-
-    sqi->mem.__ldb_mmu_trace = __ldb_mmu_trace;
-    sqi->mem.__ldw_mmu_trace = __ldw_mmu_trace;
-    sqi->mem.__ldl_mmu_trace = __ldl_mmu_trace;
-    sqi->mem.__ldq_mmu_trace = __ldq_mmu_trace;
-    sqi->mem.__stb_mmu_trace = __stb_mmu_trace;
-    sqi->mem.__stw_mmu_trace = __stw_mmu_trace;
-    sqi->mem.__stl_mmu_trace = __stl_mmu_trace;
-    sqi->mem.__stq_mmu_trace = __stq_mmu_trace;
 
     sqi->expr.mgr = s2e_expr_mgr;
     sqi->expr.clear = s2e_expr_clear;
@@ -141,8 +120,8 @@ void init_s2e_libcpu_interface(struct se_libcpu_interface_t *sqi) {
     sqi->events.on_tlb_miss = s2e_on_tlb_miss;
     sqi->events.after_memory_access = s2e_after_memory_access;
     sqi->events.trace_port_access = s2e_trace_port_access;
-    sqi->events.tcg_execution_handler = s2e_tcg_execution_handler;
-    sqi->events.tcg_custom_instruction_handler = s2e_tcg_custom_instruction_handler;
+    sqi->events.tcg_execution_handler = helper_s2e_tcg_execution_handler;
+    sqi->events.tcg_custom_instruction_handler = helper_s2e_tcg_custom_instruction_handler;
     sqi->events.tcg_emit_custom_instruction = s2e_tcg_emit_custom_instruction;
 
     sqi->events.on_translate_soft_interrupt_start = s2e_on_translate_soft_interrupt_start;

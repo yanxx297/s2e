@@ -23,8 +23,13 @@
 
 #define LIBTCG_ROUNDING
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Round number down to multiple
 #define ALIGN_DOWN(base, size) ((base) / (size) * (size))
+#define QEMU_ALIGN_DOWN        ALIGN_DOWN
 
 // Align a value by rounding up to closest size.
 // E.g. Using size of 4096, we get this behavior:
@@ -33,10 +38,11 @@
 #define ALIGN_UP(base, size) ALIGN_DOWN((base) + (size) -1, (base))
 
 // Same as ALIGN_DOWN(), but automatically casts when base is a pointer
-#define ALIGN_PTR_DOWN(base, size) ((typeof(base)) ALIGN_DOWN((uintptr_t)(base), (size)))
+#define ALIGN_PTR_DOWN(base, size) ((typeof(base)) ALIGN_DOWN((uintptr_t) (base), (size)))
 
 // Same as ALIGN_UP(), but automatically casts when base is a pointer
-#define ALIGN_PTR_UP(base, size) ((typeof(base)) ALIGN_UP((uintptr_t)(base), (size)))
+#define ALIGN_PTR_UP(base, size) ((typeof(base)) ALIGN_UP((uintptr_t) (base), (size)))
+#define QEMU_ALIGN_PTR_UP        ALIGN_PTR_UP
 
 // Round number up to multiple.
 // Requires that size be a power of 2.
@@ -46,6 +52,10 @@
 
 #ifndef DIV_ROUND_UP
 #define DIV_ROUND_UP(base, size) (((base) + (size) -1) / (size))
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif

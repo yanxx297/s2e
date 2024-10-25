@@ -92,7 +92,7 @@ public:
         }
     }
 
-    bool getPidFromHandle(uint64 ownerPid, uint64_t handle, uint64_t *pid) const {
+    bool getPidFromHandle(uint64_t ownerPid, uint64_t handle, uint64_t *pid) const {
         if (handle == (uint64_t) -1) {
             *pid = ownerPid;
             return true;
@@ -323,7 +323,9 @@ void WindowsMonitor::onDriverLoad(S2EExecutionState *state, uint64_t pc) {
     vmi::Imports imports;
     if (m_vmi->getResolvedImports(state, DriverDesc, imports)) {
         StringSet importedModules;
-        foreach2 (it, imports.begin(), imports.end()) { importedModules.insert((*it).first); }
+        foreach2 (it, imports.begin(), imports.end()) {
+            importedModules.insert((*it).first);
+        }
 
         ModuleList modules;
         readModuleList(state, modules, importedModules);
@@ -586,7 +588,8 @@ void WindowsMonitor::enableInstrumentation(S2EExecutionState *state) {
 
 void WindowsMonitor::onTranslateSpecialInstructionEnd(ExecutionSignal *signal, S2EExecutionState *state,
                                                       TranslationBlock *tb, uint64_t pc,
-                                                      enum special_instruction_t type) {
+                                                      enum special_instruction_t type,
+                                                      const special_instruction_data_t *data) {
     if (type != SYSENTER && type != SYSCALL) {
         return;
     }
@@ -1171,7 +1174,7 @@ bool WindowsMonitor::getMemoryStatisticsForCurrentProcess(S2EExecutionState *sta
 
 bool WindowsMonitor::getVirtualMemoryInfo(S2EExecutionState *state, uint64_t Process, uint64_t Address,
                                           uint64_t *StartAddress, uint64_t *EndAddress, uint64_t *Protection) {
-    if (m_kernel.KernelMajorVersion != 5 && m_kernel.KernelMinorVersion != 1) {
+    if (!(m_kernel.KernelMajorVersion == 5 && m_kernel.KernelMinorVersion == 1)) {
         // TODO: make it work on other versions of Windows
         return false;
     }
@@ -1303,15 +1306,15 @@ QDict *WindowsMonitor::getTrapInformation(S2EExecutionState *state, uint64_t tra
             return info;
         }
 
-        qdict_put_obj(info, "eip", QOBJECT(qint_from_int(TrapFrame.Eip)));
-        qdict_put_obj(info, "eax", QOBJECT(qint_from_int(TrapFrame.Eax)));
-        qdict_put_obj(info, "ebx", QOBJECT(qint_from_int(TrapFrame.Ebx)));
-        qdict_put_obj(info, "ecx", QOBJECT(qint_from_int(TrapFrame.Ecx)));
-        qdict_put_obj(info, "edx", QOBJECT(qint_from_int(TrapFrame.Edx)));
-        qdict_put_obj(info, "edi", QOBJECT(qint_from_int(TrapFrame.Edi)));
-        qdict_put_obj(info, "esi", QOBJECT(qint_from_int(TrapFrame.Esi)));
-        qdict_put_obj(info, "ebp", QOBJECT(qint_from_int(TrapFrame.Ebp)));
-        qdict_put_obj(info, "esp", QOBJECT(qint_from_int(TrapFrame.HardwareEsp)));
+        qdict_put_obj(info, "eip", QOBJECT(qnum_from_int(TrapFrame.Eip)));
+        qdict_put_obj(info, "eax", QOBJECT(qnum_from_int(TrapFrame.Eax)));
+        qdict_put_obj(info, "ebx", QOBJECT(qnum_from_int(TrapFrame.Ebx)));
+        qdict_put_obj(info, "ecx", QOBJECT(qnum_from_int(TrapFrame.Ecx)));
+        qdict_put_obj(info, "edx", QOBJECT(qnum_from_int(TrapFrame.Edx)));
+        qdict_put_obj(info, "edi", QOBJECT(qnum_from_int(TrapFrame.Edi)));
+        qdict_put_obj(info, "esi", QOBJECT(qnum_from_int(TrapFrame.Esi)));
+        qdict_put_obj(info, "ebp", QOBJECT(qnum_from_int(TrapFrame.Ebp)));
+        qdict_put_obj(info, "esp", QOBJECT(qnum_from_int(TrapFrame.HardwareEsp)));
 
         *pc = TrapFrame.Eip;
         *sp = TrapFrame.HardwareEsp;
@@ -1322,15 +1325,15 @@ QDict *WindowsMonitor::getTrapInformation(S2EExecutionState *state, uint64_t tra
             return info;
         }
 
-        qdict_put_obj(info, "rip", QOBJECT(qint_from_int(TrapFrame.Rip)));
-        qdict_put_obj(info, "rax", QOBJECT(qint_from_int(TrapFrame.Rax)));
-        qdict_put_obj(info, "rbx", QOBJECT(qint_from_int(TrapFrame.Rbx)));
-        qdict_put_obj(info, "rcx", QOBJECT(qint_from_int(TrapFrame.Rcx)));
-        qdict_put_obj(info, "rdx", QOBJECT(qint_from_int(TrapFrame.Rdx)));
-        qdict_put_obj(info, "rdi", QOBJECT(qint_from_int(TrapFrame.Rdi)));
-        qdict_put_obj(info, "rsi", QOBJECT(qint_from_int(TrapFrame.Rsi)));
-        qdict_put_obj(info, "rbp", QOBJECT(qint_from_int(TrapFrame.Rbp)));
-        qdict_put_obj(info, "rsp", QOBJECT(qint_from_int(TrapFrame.Rsp)));
+        qdict_put_obj(info, "rip", QOBJECT(qnum_from_int(TrapFrame.Rip)));
+        qdict_put_obj(info, "rax", QOBJECT(qnum_from_int(TrapFrame.Rax)));
+        qdict_put_obj(info, "rbx", QOBJECT(qnum_from_int(TrapFrame.Rbx)));
+        qdict_put_obj(info, "rcx", QOBJECT(qnum_from_int(TrapFrame.Rcx)));
+        qdict_put_obj(info, "rdx", QOBJECT(qnum_from_int(TrapFrame.Rdx)));
+        qdict_put_obj(info, "rdi", QOBJECT(qnum_from_int(TrapFrame.Rdi)));
+        qdict_put_obj(info, "rsi", QOBJECT(qnum_from_int(TrapFrame.Rsi)));
+        qdict_put_obj(info, "rbp", QOBJECT(qnum_from_int(TrapFrame.Rbp)));
+        qdict_put_obj(info, "rsp", QOBJECT(qnum_from_int(TrapFrame.Rsp)));
 
         *pc = TrapFrame.Rip;
         *sp = TrapFrame.Rsp;

@@ -27,6 +27,8 @@
 #include <llvm/Support/DynamicLibrary.h>
 #include <stdlib.h>
 
+#include <tcg/tcg-llvm.h>
+
 extern "C" {
 #include <cpu-all.h>
 #include <exec-all.h>
@@ -34,8 +36,6 @@ extern "C" {
 }
 
 #include "TranslatorWrapper.h"
-
-#include <tcg/tcg-llvm.h>
 
 s2e::S2EExecutionState *g_s2e_state = NULL;
 s2e::S2E *g_s2e = NULL;
@@ -69,10 +69,6 @@ uint8_t code_gen_prologue[1024] code_gen_section;
 
 static int is_tb_instrumented(void *se_tb) {
     return 0;
-}
-
-static void increment_tb_stats(void *se_tb) {
-    return;
 }
 
 static void set_tb_function(void *se_tb, void *llvmFunction) {
@@ -137,7 +133,8 @@ static void on_translate_instruction_start(void *context, struct TranslationBloc
 }
 
 static void on_translate_special_instruction_end(void *context, struct TranslationBlock *tb, uint64_t pc,
-                                                 enum special_instruction_t type, int update_pc) {
+                                                 enum special_instruction_t type,
+                                                 const special_instruction_data_t *data, int update_pc) {
     return;
 }
 
@@ -172,7 +169,6 @@ struct se_libcpu_interface_t g_sqi = {
     .tb = {
         .set_tb_function = set_tb_function,
         .is_tb_instrumented = is_tb_instrumented,
-        .increment_tb_stats = increment_tb_stats
     },
     .events = {
         .before_memory_access_signals_count = &s_count,
@@ -278,9 +274,6 @@ int s2e_is_tb_instrumented(void *tb) {
     return 0;
 }
 
-void s2e_increment_tb_stats(TranslationBlock *tb) {
-}
-
 int s2e_is_running_concrete() {
     return 0;
 }
@@ -351,7 +344,8 @@ void s2e_on_translate_lea_rip_relative(void *context, struct TranslationBlock *t
 }
 
 void s2e_on_translate_special_instruction_end(void *context, struct TranslationBlock *tb, uint64_t pc,
-                                              enum special_instruction_t type, int update_pc) {
+                                              enum special_instruction_t type, const special_instruction_data_t *data,
+                                              int update_pc) {
 }
 
 void s2e_on_translate_register_access(struct TranslationBlock *tb, uint64_t pc, uint64_t readMask, uint64_t writeMask,

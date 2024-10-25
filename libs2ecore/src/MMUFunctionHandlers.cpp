@@ -42,10 +42,10 @@ namespace s2e {
 #define S2E_RAM_OBJECT_DIFF (TARGET_PAGE_BITS - SE_RAM_OBJECT_BITS)
 #ifdef SOFTMMU_CODE_ACCESS
 #define READ_ACCESS_TYPE 2
-#define ADDR_READ addr_code
+#define ADDR_READ        addr_code
 #else
 #define READ_ACCESS_TYPE 0
-#define ADDR_READ addr_read
+#define ADDR_READ        addr_read
 #endif
 
 // XXX: Fix this
@@ -178,21 +178,21 @@ end:
 static ref<ConstantExpr> handleForkAndConcretizeNative(Executor *executor, ExecutionState *state,
                                                        klee::KInstruction *target, const ref<Expr> &symbAddress) {
     ref<ConstantExpr> constantAddress = dyn_cast<ConstantExpr>(symbAddress);
-    if (constantAddress.isNull()) {
+    if (!constantAddress) {
         // Find the LLVM instruction that computes the address
         const llvm::Instruction *addrInst = dyn_cast<llvm::Instruction>(target->inst->getOperand(0));
-        assert(target->owner->instrMap.count(addrInst));
+        auto kinst = target->owner->getInstruction(addrInst);
+        assert(kinst);
 
         std::vector<ref<Expr>> forkArgs;
         forkArgs.push_back(symbAddress);
         forkArgs.push_back(ref<Expr>(nullptr));
         forkArgs.push_back(ref<Expr>(nullptr));
         forkArgs.push_back(0);
-        KInstruction *kinst = (*target->owner->instrMap.find(addrInst)).second;
         handleForkAndConcretize(executor, state, kinst, forkArgs);
 
         constantAddress = dyn_cast<ConstantExpr>(state->getDestCell(kinst).value);
-        assert(!constantAddress.isNull());
+        assert(constantAddress);
     }
     return constantAddress;
 }
@@ -203,7 +203,7 @@ static ref<Expr> handle_ldst_mmu(Executor *executor, ExecutionState *state, klee
     S2EExecutionState *s2estate = static_cast<S2EExecutionState *>(state);
 
     ref<ConstantExpr> envExpr = dyn_cast<ConstantExpr>(args[0]);
-    assert(!envExpr.isNull());
+    assert(envExpr);
     CPUArchState *env = (CPUArchState *) envExpr->getZExtValue();
 
     const auto &symbAddress = args[1];
@@ -233,7 +233,7 @@ static ref<Expr> handle_ldst_mmu(Executor *executor, ExecutionState *state, klee
 
 redo:
 
-    const auto &tlbEntry = env->tlb_table[mmu_idx][index];
+    const auto &tlbEntry = env->tlb_table[mmu_idx].table[index];
 
     if (isWrite) {
         tlb_addr = tlbEntry.addr_write & ~TLB_MEM_TRACE;
@@ -442,7 +442,7 @@ static void handle_ldst_kernel(Executor *executor, ExecutionState *state, klee::
     unsigned mmu_idx = CPU_MMU_INDEX;
 
     ref<ConstantExpr> envExpr = dyn_cast<ConstantExpr>(args[0]);
-    assert(!envExpr.isNull());
+    assert(envExpr);
     CPUArchState *env = (CPUArchState *) envExpr->getZExtValue();
 
     const auto &symbAddress = args[1];
@@ -458,7 +458,7 @@ static void handle_ldst_kernel(Executor *executor, ExecutionState *state, klee::
     page_index = (object_index >> S2E_RAM_OBJECT_DIFF) & (CPU_TLB_SIZE - 1);
 
     //////////////////////////////////////////
-    const auto &tlbEntry = env->tlb_table[mmu_idx][page_index];
+    const auto &tlbEntry = env->tlb_table[mmu_idx].table[page_index];
 
     if (isWrite) {
         value = args[2];
@@ -613,7 +613,7 @@ void S2EExecutor::replaceExternalFunctionsWithSpecialHandlers() {
 
     for (unsigned i = 0; i < N; ++i) {
         const auto &hi = s_handlerInfo[i];
-        auto f = kmodule->module->getFunction(hi.name);
+        auto f = kmodule->getModule()->getFunction(hi.name);
         assert(f);
         addSpecialFunctionHandler(f, hi.handler);
         overridenInternalFunctions.insert(f);
@@ -629,7 +629,7 @@ void S2EExecutor::disableConcreteLLVMHelpers() {
     unsigned N = sizeof(s_disabledHelpers) / sizeof(s_disabledHelpers[0]);
 
     for (unsigned i = 0; i < N; ++i) {
-        llvm::Function *f = kmodule->module->getFunction(s_disabledHelpers[i]);
+        llvm::Function *f = kmodule->getModule()->getFunction(s_disabledHelpers[i]);
         assert(f && "Could not find required helper");
         kmodule->removeFunction(f, true);
     }

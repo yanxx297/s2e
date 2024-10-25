@@ -21,7 +21,6 @@
 /// SOFTWARE.
 ///
 
-#include <klee/UserSearcher.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/Path.h>
 #include <s2e/ConfigFile.h>
@@ -273,7 +272,7 @@ bool SeedSearcher::empty() {
 }
 
 void SeedSearcher::backupSeed(const std::string &seedFilePath) {
-    std::string fileName = llvm::sys::path::filename(seedFilePath);
+    auto fileName = std::string(llvm::sys::path::filename(seedFilePath));
 
     std::stringstream destination;
     destination << m_seedBackupDirectory << "/" << fileName;
@@ -319,7 +318,7 @@ void SeedSearcher::fetchNewSeeds() {
         }
 
         boost::smatch what;
-        std::string fileName = llvm::sys::path::filename(entry);
+        auto fileName = std::string(llvm::sys::path::filename(entry));
         if (!boost::regex_match(fileName, what, filePattern)) {
             getWarningsStream() << entry << " is not a valid seed name\n";
             continue;

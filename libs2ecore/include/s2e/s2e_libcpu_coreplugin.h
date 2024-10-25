@@ -36,8 +36,8 @@ extern "C" {
 
 struct TranslationBlock;
 
-void s2e_tcg_execution_handler(void *signal, uint64_t pc);
-void s2e_tcg_custom_instruction_handler(uint64_t arg);
+void helper_s2e_tcg_execution_handler(void *signal, uint64_t pc);
+void helper_s2e_tcg_custom_instruction_handler(uint64_t arg);
 
 /** Called by the translator when a custom instruction is detected */
 void s2e_tcg_emit_custom_instruction(uint64_t arg);
@@ -60,7 +60,8 @@ void s2e_on_translate_instruction_start(void *context, struct TranslationBlock *
 
 /** Called by cpu_gen_code() after translation of certain special types of instructions */
 void s2e_on_translate_special_instruction_end(void *context, struct TranslationBlock *tb, uint64_t pc,
-                                              enum special_instruction_t type, int update_pc);
+                                              enum special_instruction_t type, const special_instruction_data_t *data,
+                                              int update_pc);
 
 /** Called by cpu_gen_code() after translation of each instruction */
 void s2e_on_translate_instruction_end(void *context, struct TranslationBlock *tb, uint64_t pc, uint64_t nextpc);
@@ -81,10 +82,10 @@ void s2e_on_exception(unsigned intNb);
 int s2e_on_call_return_translate(uint64_t pc, int isCall);
 
 /** Called on memory accesses from generated code */
-#define MEM_TRACE_FLAG_IO 1
-#define MEM_TRACE_FLAG_WRITE 2
+#define MEM_TRACE_FLAG_IO      1
+#define MEM_TRACE_FLAG_WRITE   2
 #define MEM_TRACE_FLAG_PRECISE 4
-#define MEM_TRACE_FLAG_PLUGIN 8
+#define MEM_TRACE_FLAG_PLUGIN  8
 
 void s2e_after_memory_access(uint64_t vaddr, uint64_t value, unsigned size, unsigned flags, uintptr_t retaddr);
 

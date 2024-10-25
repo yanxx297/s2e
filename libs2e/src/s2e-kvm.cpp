@@ -26,7 +26,7 @@
 #include <cpu/cpus.h>
 #include <cpu/exec.h>
 #include <cpu/memory.h>
-#include <libcpu-log.h>
+#include <tcg/utils/log.h>
 #include <timer.h>
 
 #include <cpu/cpu-common.h>
@@ -48,6 +48,7 @@
 #include "s2e-kvm.h"
 
 extern void *g_s2e;
+extern bool g_execute_always_klee;
 
 extern CPUX86State *env;
 
@@ -236,6 +237,13 @@ void S2EKVM::init(void) {
                         "using the default (empty) config file\n");
     }
 
+    auto always_klee = getenv("S2E_ALWAYS_KLEE");
+    if (always_klee) {
+        if (!strcmp(always_klee, "1")) {
+            g_execute_always_klee = true;
+        }
+    }
+
     auto output_dir = getenv("S2E_OUTPUT_DIR");
 
     auto bc = getBitcodeLibrary(shared_dir);
@@ -254,7 +262,7 @@ void S2EKVM::init(void) {
 
     int max_processes = 1;
     const char *max_processes_str = getenv("S2E_MAX_PROCESSES");
-    if (max_processes) {
+    if (max_processes_str) {
         max_processes = strtol(max_processes_str, NULL, 0);
     }
 
@@ -345,6 +353,11 @@ int S2EKVM::checkExtension(int capability) {
 
         case KVM_CAP_ADJUST_CLOCK:
             return KVM_CLOCK_TSC_STABLE;
+
+#ifdef CONFIG_SYMBEX
+        case KVM_CAP_UPCALLS:
+            return 1;
+#endif
 
         default:
 #ifdef SE_KVM_DEBUG_INTERFACE
@@ -543,6 +556,14 @@ int S2EKVM::sys_ioctl(int fd, int request, uint64_t arg1) {
         case KVM_GET_SUPPORTED_CPUID: {
             ret = getSupportedCPUID((kvm_cpuid2 *) arg1);
         } break;
+
+#ifdef CONFIG_SYMBEX
+        case KVM_REGISTER_UPCALLS: {
+            auto upcalls = (kvm_dev_upcalls *) arg1;
+            g_sqi.upcalls.screendump = upcalls->screendump;
+            ret = 0;
+        } break;
+#endif
 
         default: {
             fprintf(stderr, "libs2e: unknown KVM IOCTL %x\n", request);
