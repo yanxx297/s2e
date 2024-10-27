@@ -119,7 +119,8 @@ void ForkControl::slotSymbolicVariableCreation(S2EExecutionState *state,
     }
 }
 
-void ForkControl::onStateForkDecide(S2EExecutionState *state, bool *doFork){
+void ForkControl::onStateForkDecide(S2EExecutionState *state, 
+	const klee::ref<klee::Expr> &condition, bool &allowForking) {
     uint64_t pc = state->regs()->getPc();
     DECLARE_PLUGINSTATE(ForkControlState, state);
     if(m_progStart && plgState->isForkStartAddr(pc)){

@@ -40,7 +40,7 @@ public:
 
     void slotTranslateInstructionStart(ExecutionSignal *, S2EExecutionState *state, TranslationBlock *tb, uint64_t pc);
     void slotProgStart(S2EExecutionState *state, uint64_t pc);
-    void onStateForkDecide(S2EExecutionState *state, bool *doFork);
+    void onStateForkDecide(S2EExecutionState *state, const klee::ref<klee::Expr> &condition, bool &allowForking);
     void slotSymbolicVariableCreation(S2EExecutionState *state, 
 	    const std::string &name, 
 	    const std::vector<klee::ref<klee::Expr>>& expr, 

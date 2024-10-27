@@ -92,8 +92,6 @@ private:
 
     void slotStateKill(S2EExecutionState *state); 
 
-    void slotStateKill(S2EExecutionState *state); 
-
 public:
     /// Emitted when a trap occurs in the kernel (e.g. divide by zero, etc.)
     sigc::signal<void, S2EExecutionState *, uint64_t, /* pid */
