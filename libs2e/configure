@@ -361,7 +361,7 @@ cd ..
 echo "============== Configuring $target done ============== "
 }
 
-TARGETS="x86_64-s2e-softmmu"
+TARGETS="i386-softmmu i386-s2e-softmmu i386-s2e_sp-softmmu x86_64-softmmu x86_64-s2e-softmmu x86_64-s2e_sp-softmmu"
 
 for target in $TARGETS; do
     rm -f ${target}.log
